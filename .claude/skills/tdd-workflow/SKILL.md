@@ -140,9 +140,12 @@ Command matrix:
 
 | Repo | Language | `<test>` | `<test-one>` | `<coverage>` | `<build>` |
 |---|---|---|---|---|---|
-| `backend` | TypeScript, Jest (`ts-jest`) | `npm test` | `npx jest src/path/to/file.test.ts` | `npm run test:coverage` | `npx tsc --noEmit` |
-| `sport` | Go 1.24 | `go test ./...` | `go test -run TestName ./internal/domain` | `go test -coverprofile=coverage.out ./internal/... && go tool cover -func=coverage.out` | `go build ./...` |
-| `player` | Go 1.24 | `go test ./...` | `go test -run TestName ./internal/domain` | `go test -coverprofile=coverage.out ./internal/... && go tool cover -func=coverage.out` | `go build ./...` |
+| `backend` | TypeScript, Jest (`ts-jest`) | `npm test -- --maxWorkers=2 --workerIdleMemoryLimit=512MB` | `npx jest --maxWorkers=1 --watchman=false src/path/to/file.test.ts` | `npm run test:coverage -- --maxWorkers=2 --workerIdleMemoryLimit=512MB` | `npx tsc --noEmit` |
+| `sport` | Go 1.24 | `go test -p 4 ./...` | `go test -run TestName ./internal/domain` | `go test -p 4 -coverprofile=coverage.out ./internal/... && go tool cover -func=coverage.out` | `go build ./...` |
+| `player` | Go 1.24 | `go test -p 4 ./...` | `go test -run TestName ./internal/domain` | `go test -p 4 -coverprofile=coverage.out ./internal/... && go tool cover -func=coverage.out` | `go build ./...` |
+
+The concurrency flags are part of the command, not decoration - see "Bounded
+runs" below before dropping one.
 
 Notes that matter in practice:
 
@@ -152,12 +155,44 @@ Notes that matter in practice:
   need proof the test actually ran for the RED/GREEN gate.
 - **Go watch mode**: there is no native watch. Rerun `<test-one>` on the narrow package;
   it is fast enough that a watcher is not worth adding.
-- **backend watch mode**: `npm run test:watch`.
+- **backend watch mode**: `npm run test:watch -- --maxWorkers=2`. A watcher holds
+  its workers alive between runs, so leaving one running costs the machine for as
+  long as the session lasts. Close it when you stop iterating.
 - **backend narrow runs**: the repo already ships focused scripts, for example
   `npm run test:leaderboard-strategies` and `npm run test:leaderboard-integration`.
   Use an existing script when one matches, rather than a new ad-hoc invocation.
 - **A change spanning two services** must satisfy the gate in each service separately.
   Two repos means two RED runs and two GREEN runs.
+
+### Bounded runs: one machine, many sessions
+
+Every runner in the matrix defaults to filling the machine. Jest forks one worker
+per core minus one, and each worker is a node process carrying its own ts-jest
+compiler; `go test` builds and runs up to `GOMAXPROCS` package binaries at once.
+Both defaults assume they are the only thing running.
+
+In this workspace they are not. Sessions run concurrently, each in its own space,
+each free to start a full suite - so the real load is the default multiplied by
+however many sessions are alive. That is how a laptop ends up swapping with
+twenty-odd node processes on it, none of which is doing anything wrong.
+
+The caps are small fixed numbers rather than a fraction of the core count, because
+a fraction still scales with the machine while the number of concurrent sessions
+does not shrink to compensate.
+
+- **Do not drop a cap to make a run faster.** A capped run that leaves the machine
+  responsive finishes sooner than an uncapped one that makes it swap.
+- **`--workerIdleMemoryLimit=512MB` restarts a worker that grows past it.** ts-jest
+  accumulates across a long suite, so without it two workers can end up costing
+  more than eleven short-lived ones.
+- **Raising a cap for a single run is fine** when you know the machine is otherwise
+  idle. Do it on the command line for that run; do not edit the matrix, and do not
+  carry the raised value into the next command.
+- **Never fix this by editing a service repo's `jest.config.js` or CI config.** The
+  constraint is this workspace's, not the service's, and `repos/` is read-only
+  anyway. If a repo should ship a different default, that is a task with a PRD.
+- **Node processes can outlive the session that started them.** `pgrep -fl jest`
+  lists them; orphaned workers are safe to kill.
 
 ### Step 1: Write User Journeys
 
