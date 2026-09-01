@@ -49,7 +49,7 @@ Per repo:
 
 | Check | Condition | Action if failed |
 |---|---|---|
-| On the space's branch | `git branch --show-current` = `ccs/<task>` | Stop: report the actual branch, do not switch |
+| On the space's branch | `git branch --show-current` = `<prefix>/<task>` | Stop: report the actual branch, do not switch |
 | Base branch exists | `git rev-parse --verify origin/<base>` succeeds | Stop: name the missing ref |
 | Not based on itself | Current branch ≠ base | Stop: "branch and base are the same" |
 | No existing PR | `gh pr list --head <branch> --json number` is empty | Report the existing PR number; push to it instead of creating a second |
@@ -230,7 +230,7 @@ Task <task> — {n} pull request(s)
 
   #<number>  <repo>    <title>
              <url>
-             ccs/<task> -> <base>   +<add> -<del> across <files> files
+             <prefix>/<task> -> <base>   +<add> -<del> across <files> files
              checks: <status | none configured>
 
   #<number>  <repo>    ...

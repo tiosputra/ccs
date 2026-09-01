@@ -11,11 +11,13 @@
 #   space.sh add <task> [repos] [--from <ref>] [--branch <name>]
 #                               [--no-fetch] [--no-env] [--dry-run]
 #   space.sh list [task]
+#   space.sh repos                  the roster, read from disk
+#   space.sh config                 resolved settings and where they came from
 #   space.sh report <task>          facts for a wrap-up summary (read-only)
 #   space.sh remove <task> [repos] [--delete-branch] [--force]
 #   space.sh slash <args...>        dispatcher for the /space command
 #
-#   repos   comma list of aliases (backend,sport,player). Default: all.
+#   repos   comma list of aliases - `space.sh repos` lists them. Default: all.
 #   --from  base ref for NEW branches. Either one ref for everything
 #           (--from origin/main) or per-repo overrides
 #           (--from backend=origin/release-2,sport=origin/main).
@@ -35,8 +37,11 @@ REPOS_DIR="$ROOT/repos"
 SPACES_DIR="$ROOT/spaces"
 SPACE_LOG_DIR="$ROOT/space-log"
 
-BRANCH_PREFIX="${SPACE_BRANCH_PREFIX:-ccs}"
-DEFAULT_BASE="${SPACE_DEFAULT_BASE:-origin/main}"
+. "$SCRIPT_DIR/config.sh"
+cfg_resolve SPACE_BRANCH_PREFIX ccs
+cfg_resolve SPACE_DEFAULT_BASE origin/main
+BRANCH_PREFIX="$SPACE_BRANCH_PREFIX"
+DEFAULT_BASE="$SPACE_DEFAULT_BASE"
 # Untracked-but-essential files copied from the main checkout into a new
 # worktree (git worktrees only carry tracked files).
 ENV_GLOBS=(".env" ".env.local" ".env.development" ".env.*.local")
@@ -59,7 +64,7 @@ fail() { printf '  %sx%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; }
 dim()  { printf '    %s%s%s\n' "$C_DIM" "$*" "$C_RESET"; }
 die()  { printf '%serror:%s %s\n' "$C_RED$C_BOLD" "$C_RESET" "$*" >&2; exit 1; }
 
-usage() { sed -n '3,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '3,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 # ----------------------------------------------------------------- repos --
 
@@ -263,6 +268,54 @@ cmd_new() {
     return 1
   fi
   info "${C_GREEN}ready${C_RESET}  cd $space"
+}
+
+# ----------------------------------------------------------------- repos --
+
+# The roster, read from disk. Docs point at this instead of naming services,
+# so cloning another checkout into repos/ never needs a doc edit.
+cmd_repos() {
+  local repo dir url open n=0
+  [ -d "$REPOS_DIR" ] || { info "no repos yet"; return 0; }
+  step "repos"
+  for repo in $(all_repos); do
+    dir="$REPOS_DIR/$repo"
+    url="$(git -C "$dir" remote get-url origin 2>/dev/null || echo '-')"
+    # git@github.com:Org/name.git and https://github.com/Org/name -> Org/name
+    url="$(printf '%s' "$url" | sed -e 's|\.git$||' -e 's|^.*github\.com[:/]||')"
+    open=""
+    for d in "$SPACES_DIR"/*/"$repo"; do
+      [ -e "$d/.git" ] || continue
+      open="$open $(basename "$(dirname "$d")")"
+    done
+    printf '  %-10s %-16s %-34s %s\n' \
+      "$repo" "repos/$repo" "$url" "${open:+open:${open// /, }}"
+    n=$((n + 1))
+  done
+  info ""
+  info "$n checkout(s). The directory name is the alias; a longer service name"
+  info "resolves by prefix, so 'sport-service' finds 'sport'."
+  info "Add one by cloning into repos/ - nothing else needs changing."
+}
+
+# ---------------------------------------------------------------- config --
+
+# What the settings actually resolved to, and which layer won. Docs state the
+# rule; this states the value, so no tracked file has to name anyone's prefix.
+cmd_config() {
+  step "config"
+  printf '  %-22s %-18s %s\n' "SPACE_BRANCH_PREFIX" "$BRANCH_PREFIX" \
+    "(from $(cfg_source SPACE_BRANCH_PREFIX))"
+  printf '  %-22s %-18s %s\n' "SPACE_DEFAULT_BASE" "$DEFAULT_BASE" \
+    "(from $(cfg_source SPACE_DEFAULT_BASE))"
+  info ""
+  info "  a new space would branch:  ${C_BOLD}$BRANCH_PREFIX/<task>${C_RESET}"
+  info ""
+  if [ -f "$(cfg_file)" ]; then
+    dim "$(cfg_file) exists (gitignored)"
+  else
+    dim "no .env yet - cp .env.example .env to set your own"
+  fi
 }
 
 # ------------------------------------------------------------------ list --
@@ -484,12 +537,22 @@ cmd_slash() {
       printf 'mode\tlist\n\n'
       cmd_list "$@"
       ;;
+    repos)
+      shift
+      printf 'mode\trepos\n\n'
+      cmd_repos
+      ;;
+    config)
+      shift
+      printf 'mode\tconfig\n\n'
+      cmd_config
+      ;;
     ""|-h|--help)
       usage
       ;;
     *)
       usage
-      die "unknown command '$sub' - use add, remove, or list"
+      die "unknown command '$sub' - use add, remove, list, repos, or config"
       ;;
   esac
 }
@@ -502,8 +565,10 @@ case "${1:-}" in
   ""|-h|--help) usage ;;
   add|new)   shift; cmd_new "$@" ;;
   list|ls)   shift; cmd_list "$@" ;;
+  repos)     shift; cmd_repos ;;
+  config)    shift; cmd_config ;;
   report)    shift; cmd_report "$@" ;;
   remove|rm) shift; cmd_rm "$@" ;;
   slash)     shift; cmd_slash "$@" ;;
-  *) usage; die "unknown command '$1' - use add, remove, or list" ;;
+  *) usage; die "unknown command '$1' - use add, remove, list, repos, or config" ;;
 esac

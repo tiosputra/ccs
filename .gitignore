@@ -36,7 +36,14 @@
 # Per-machine Claude Code overrides. settings.json is shared; .local is not.
 .claude/settings.local.json
 
+# Per-machine workspace settings - branch prefix, default base ref. Everyone
+# has their own; .env.example is the tracked template. See .claude/scripts/config.sh.
+/.env
+!/.env.example
+
 # ------------------------------------------------------------------- noise --
 .DS_Store
 *.swp
 *~
+
+.env

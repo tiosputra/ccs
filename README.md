@@ -1,3 +1,6 @@
+Inspired by : https://github.com/affaan-m
+
+
 # swing
 
 A control workspace for working on the Getswing services in parallel.
@@ -16,14 +19,11 @@ whiplash between them.
 ```
 swing/
 ├── repos/                  canonical checkouts — the source of truth
-│   ├── backend/                Getswing-Team/backend
-│   ├── sport/                  Getswing-Team/sport-service
-│   └── player/                 Getswing-Team/player-service
+│   └── <service>/              one clone per service, however many there are
 │
 ├── spaces/                 one directory per task, worktrees inside
 │   └── add-label/
-│       ├── backend/            -> repos/backend    on ccs/add-label
-│       └── sport/              -> repos/sport      on ccs/add-label
+│       └── <service>/          -> repos/<service>  on <prefix>/add-label
 │
 ├── prds/                   one PRD per task, <YYYY-MM-DD>_<task>.md
 ├── plans/                  one plan per milestone, <task>-m<N>.plan.md
@@ -31,11 +31,13 @@ swing/
 ├── release/                deployment runbooks, one per release
 │
 ├── .claude/
-│   ├── commands/           /plan-prd, /plan, /space, /pr
-│   ├── skills/             tdd-workflow and the pattern skills
+│   ├── commands/           /plan-prd, /plan, /space, /pr, /ccs
+│   ├── skills/             tdd-workflow, ccs-conventions, the pattern skills
 │   ├── agents/             the reviewers
+│   ├── ccs-notes.md        friction found while running tasks
 │   └── scripts/
 │       ├── space.sh        creates and tears down spaces
+│       ├── ccs.sh          checks the workspace system itself
 │       └── guard.sh        PreToolUse hook - keeps repos/ read-only
 ```
 
@@ -44,13 +46,26 @@ read-only origins. All editing happens in `spaces/<task>/<repo>/`.
 
 ## Repos
 
-| Alias    | Directory       | GitHub                            |
-| -------- | --------------- | --------------------------------- |
-| `backend`| `repos/backend` | `Getswing-Team/backend`           |
-| `sport`  | `repos/sport`   | `Getswing-Team/sport-service`     |
-| `player` | `repos/player`  | `Getswing-Team/player-service`    |
+The roster is whatever is on disk. Any git checkout directly under `repos/` is
+a repo, and **its directory name is its alias**. That is the whole rule, and it
+is why no list of services appears in this file — a list here would be one more
+thing to update, and the first thing to go stale.
 
-The full service name works too — `sport-service` resolves to `sport`.
+```
+/space repos
+```
+
+prints the current roster: each checkout, its remote, and any open space using
+it. Add a service by cloning it into `repos/`. Nothing else needs changing and
+no doc needs editing.
+
+A longer service name resolves by prefix, so `sport-service` finds `sport` and
+`payment-service` finds `payment`. Wherever a command takes a repo list, it
+takes those aliases, comma-separated.
+
+**Omitting the repo list means every checkout in `repos/`.** That is a growing
+number, so a bare `/space add <task>` creates a worktree for every service you
+have cloned. Name the repos the task actually needs.
 
 ## The task flow
 
@@ -59,7 +74,7 @@ One command runs a task end to end, stopping twice to ask you:
 ```
 /plan-prd add promo codes from branch origin/feature/m5.1
       |
-      |   writes prds/add-promo-codes.prd.md
+      |   writes prds/YYYY-MM-DD-add-promo-codes.md
       |   the PRD proposes the space: repos, source branch, new branch, PR base
       |   nothing is created yet
       |
@@ -72,7 +87,7 @@ One command runs a task end to end, stopping twice to ask you:
       |
  [GATE 2]  it reports what changed and stops, uncommitted
       |
-    /pr     stage, commit, push ccs/add-promo-codes, open one PR per repo
+    /pr     stage, commit, push <prefix>/add-promo-codes, open one PR per repo
 ```
 
 Those two stops are the whole point: you read the requirements before a branch
@@ -82,7 +97,8 @@ exists, and you see the finished work before anything is pushed.
 
 ## Everyday use
 
-Everything space-related goes through one command: `/space add | remove | list`.
+Everything space-related goes through one command:
+`/space add | remove | list | repos | config`.
 
 Start a task across every service:
 
@@ -102,6 +118,18 @@ See what's open, and whether anything is dirty:
 /space list
 ```
 
+See which services are checked out at all:
+
+```
+/space repos
+```
+
+See what your branch prefix and default base resolve to:
+
+```
+/space config
+```
+
 Finish up. This writes `space-log/<task>.md` **before** removing anything, so
 the summary is captured while the diffs still exist:
 
@@ -113,9 +141,6 @@ the summary is captured while the diffs still exist:
 that have not reached any remote. Push or stash first, or pass `--force` to
 discard on purpose.
 
-(`/spaceclear <task>` is the older standalone teardown command and still works;
-`/space remove` supersedes it.)
-
 ## `space.sh` reference
 
 The slash command is a thin wrapper; the script runs standalone too.
@@ -123,6 +148,8 @@ The slash command is a thin wrapper; the script runs standalone too.
 ```
 .claude/scripts/space.sh add <task> [repos] [flags]     create a space
 .claude/scripts/space.sh list [task]                    list spaces, show dirty state
+.claude/scripts/space.sh repos                          the roster, read from disk
+.claude/scripts/space.sh config                         resolved settings and their source
 .claude/scripts/space.sh report <task>                  read-only facts for a wrap-up
 .claude/scripts/space.sh remove <task> [repos] [flags]  tear down
 ```
@@ -133,7 +160,7 @@ Add flags:
 | ----------------- | ------------------------------------------------------------- |
 | `--from <ref>`    | Base ref for new branches. Default `origin/main`.              |
 | `--from a=x,b=y`  | Per-repo base refs, e.g. `backend=origin/release-2`.           |
-| `--branch <name>` | Override the branch name (default `ccs/<task>`).               |
+| `--branch <name>` | Override the branch name (default `<prefix>/<task>`).          |
 | `--no-fetch`      | Skip `git fetch`; use whatever refs are already local.         |
 | `--no-env`        | Don't copy `.env*` files into the new worktrees.               |
 | `--dry-run`       | Print what would happen, write nothing.                        |
@@ -147,9 +174,10 @@ touching anything.
 
 ## How it behaves
 
-- **Branch naming** — `ccs/<task>` by default, the same branch in every repo of
-  the space, so a task is one name everywhere.
-- **Branch reuse** — if `ccs/<task>` already exists locally or on `origin`, the
+- **Branch naming** — `<prefix>/<task>` by default, the same branch in every repo
+  of the space, so a task is one name everywhere. `<prefix>` is per machine, so
+  two people working the same task get branches that differ only by prefix.
+- **Branch reuse** — if `<prefix>/<task>` already exists locally or on `origin`, the
   worktree joins it instead of failing. Adding a repo to an existing space, or
   re-running the same command, is safe.
 - **Env files** — `.env`, `.env.local`, `.env.development`, `.env.*.local` are
@@ -163,12 +191,45 @@ touching anything.
 - **All-or-nothing teardown** — `remove` checks every repo before removing any,
   so a blocked teardown leaves the space intact rather than half dismantled.
 
-Two env vars change the defaults:
+## Settings
+
+Branch prefix and default base ref are **per machine**, not per workspace. They
+live in a gitignored `.env` at the root, so everyone differs without touching a
+tracked file:
 
 ```
-SPACE_BRANCH_PREFIX=ccs          # branch prefix
-SPACE_DEFAULT_BASE=origin/main   # default base ref
+cp .env.example .env
 ```
+
+```
+SPACE_BRANCH_PREFIX=<your-handle>   # branches become <your-handle>/<task>
+SPACE_DEFAULT_BASE=origin/main      # base ref when --from is not given
+```
+
+Highest wins: the environment, then `.env`, then a built-in default. So a
+one-off override works without editing anything:
+
+```
+SPACE_BRANCH_PREFIX=spike .claude/scripts/space.sh add try-it backend
+```
+
+`/space config` prints what each setting resolved to and which layer it came
+from. `.env.example` is the tracked template and lists every setting.
+
+Because the prefix differs per person, **no doc in this repo names one** —
+they all write `<prefix>/<task>`. Do not paste a real prefix into a PRD, a
+plan, or a README; it would be wrong for everyone else.
+
+## Keeping the system honest
+
+The workspace changes; the prose describing it does not. `/ccs` checks the two
+against each other — undocumented checkouts, dangling skill references, commands
+missing frontmatter, branch prefixes that have drifted — and proposes one fix at
+a time. `/ccs note <what got in the way>` records friction mid-task, while it is
+still true, into `.claude/ccs-notes.md`.
+
+Changes to the system land in this repo directly. It is not a service, so it has
+no space and no `/pr`; `ccs-conventions` describes how its pieces are shaped.
 
 ## Rules
 

@@ -1,6 +1,6 @@
 ---
 description: Create or tear down a multi-repo worktree space for a feature/bugfix/hotfix
-argument-hint: add <task> [repos] [--from <ref>] | remove <task> [--force] | list
+argument-hint: add <task> [repos] [--from <ref>] | remove <task> [--force] | list | repos | config
 allowed-tools: Bash(.claude/scripts/space.sh:*), Read, Write
 ---
 
@@ -14,9 +14,8 @@ A **space** is one task checked out across several services at once, as git
 worktrees grouped under `spaces/<task>/`:
 
 ```
-spaces/fix-promo/backend    -> repos/backend    on ccs/fix-promo
-spaces/fix-promo/sport      -> repos/sport      on ccs/fix-promo
-spaces/fix-promo/player     -> repos/player     on ccs/fix-promo
+spaces/fix-promo/backend    -> repos/backend    on <prefix>/fix-promo
+spaces/fix-promo/sport      -> repos/sport      on <prefix>/fix-promo
 ```
 
 "Task", "space", "product", "feature", "story", "bugfix", and "hotfix" all mean
@@ -26,7 +25,7 @@ reused everywhere, so a task is one word across the whole workspace:
 | Artifact | Path / name |
 |---|---|
 | Space (worktrees) | `spaces/<task>/<repo>/` |
-| Branch | `ccs/<task>` |
+| Branch | `<prefix>/<task>` — `<prefix>` is per machine, see `/space config` |
 | PRD | `prds/<YYYY-MM-DD>_<task>.md` |
 | Plan | `plans/<task>-m<N>.plan.md` |
 | TDD evidence | `spaces/<task>/<repo>/docs/testing/<task>.tdd.md` |
@@ -34,16 +33,32 @@ reused everywhere, so a task is one word across the whole workspace:
 
 Pick the name once and never rename it mid-flight.
 
-Repo aliases: `backend`, `sport` (sport-service), `player` (player-service).
-Omit the repo list to use all three.
+**Repo aliases are read from disk, never from a list in this file.** Any git
+checkout directly under `repos/` is a repo and its directory name is its alias;
+a longer service name resolves by prefix, so `sport-service` finds `sport`.
+`/space repos` prints the current roster. Cloning a new service into `repos/`
+makes it available immediately — do not add it to any doc.
+
+**Omitting the repo list means every checkout in `repos/`**, however many that
+is today. That is rarely what a task wants. If the user did not say which
+services the work touches, ask, or infer it from the PRD — do not let the
+default decide, and say in your report exactly which repos were created.
 
 ```
 /space add fix-promo backend,player --from origin/feature/m5.1
 /space add feature-booking --from origin/develop
 /space add hotfix-payment backend --from backend=origin/release-2
 /space list
+/space repos
+/space config
 /space remove fix-promo
 ```
+
+The branch a space gets is `<prefix>/<task>`, where `<prefix>` is
+`SPACE_BRANCH_PREFIX` resolved per machine — environment, then a gitignored
+`.env`, then a built-in default. **Never state a literal prefix**, in a report
+or in a file you write; read the real branch off the result above, which always
+prints what it created.
 
 `--from` is the **source branch** — the base ref new branches start from. Pass
 one ref for everything, or `repo=ref` pairs to differ per service. The script
@@ -85,6 +100,26 @@ tdd-workflow <plan path>          -> implementation inside spaces/<task>/<repo>/
 
 Relay the listing. Say which spaces are dirty.
 
+### mode: config — nothing else to do
+
+Relay what each setting resolved to and which layer won: the environment, the
+gitignored `.env`, or the built-in default.
+
+This is the answer to "what will my branch be called". Never answer that from
+memory or from a doc — no tracked file names a prefix, because it differs per
+machine. If the user wants to change it, they edit `.env` (`cp .env.example
+.env` if they have none); a one-off is an environment variable on the command.
+
+### mode: repos — nothing else to do
+
+Relay the roster: which services are checked out, their remotes, and which
+open spaces are using them. This is the answer to "what can I work on" and to
+"what would a bare `/space add` create".
+
+If a service the user expects is missing, the fix is to clone it into `repos/`
+— which is theirs to do, since the guard blocks writes there. Never propose
+editing a doc to add it; nothing in the workspace keeps a list.
+
 ### mode: remove — nothing has been removed yet
 
 The result is a **read-only report**, taken while the worktrees still exist.
@@ -119,7 +154,7 @@ creating a second file. Use this shape:
 ```markdown
 # <task>
 
-- **Branch:** ccs/<task>
+- **Branch:** <prefix>/<task>
 - **Repos:** backend, sport
 - **Base:** origin/feature/m5.1
 - **Opened:** 2026-08-28 · **Closed:** 2026-09-02

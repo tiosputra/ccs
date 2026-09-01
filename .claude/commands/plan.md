@@ -142,7 +142,7 @@ unknown.
 
 **Task**: `<task>`
 **Space**: `spaces/<task>/` — repos: backend, sport
-**Branch**: `ccs/<task>` from `origin/feature/m5.1`
+**Branch**: `<prefix>/<task>` from `origin/feature/m5.1`
 **Working directories**: `spaces/<task>/backend/`, `spaces/<task>/sport/`
 **Base commits**: backend `a1b2c3d4e`, sport `f5e6d7c8b`
 **Source PRD**: `prds/<YYYY-MM-DD>_<task>.md`
@@ -206,7 +206,7 @@ Report the handoff explicitly:
 
 ```
 Task:  <task>
-Space: spaces/<task>/  (backend, sport)  branch ccs/<task>
+Space: spaces/<task>/  (backend, sport)  branch <prefix>/<task>
 
 Milestone: {N} — {milestone name}
 Plan written: plans/<task>-m{N}.plan.md
@@ -236,7 +236,7 @@ Assistant:
 
 **Task**: `market-resolution-notifications`
 **Space**: `spaces/market-resolution-notifications/` — backend, sport
-**Branch**: `ccs/market-resolution-notifications` from `origin/develop`
+**Branch**: `<prefix>/market-resolution-notifications` from `origin/develop`
 
 ## Requirements Restatement
 - Send notifications to users when markets they're watching resolve

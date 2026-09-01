@@ -35,15 +35,24 @@ the same thing in this workspace. Everything under `.claude/` calls it a
 | Artifact | Path / name |
 |---|---|
 | Space (worktrees) | `spaces/<task>/<repo>/` |
-| Branch | `ccs/<task>` (`SPACE_BRANCH_PREFIX`) |
+| Branch | `<prefix>/<task>` — see below |
 | PRD | `prds/<YYYY-MM-DD>_<task>.md` |
 | Plan | `plans/<task>-m<N>.plan.md` (one per PRD milestone) |
 | TDD evidence | `spaces/<task>/<repo>/docs/testing/<task>.tdd.md` |
 | Wrap-up log | `space-log/<YYYY-MM-DD>-<task>.md` |
-| Pull request | one per repo in the space, branch `ccs/<task>` -> the source branch |
+| Pull request | one per repo in the space, branch `<prefix>/<task>` -> the source branch |
 
 Pick the task name once, in kebab-case, at `/plan-prd` (or at `/space add`) and
 never rename it mid-flight.
+
+`<prefix>` is **not a fixed string** and no file in this repo states it. It is
+`SPACE_BRANCH_PREFIX`, resolved per machine: the environment, then a gitignored
+`.env` at the workspace root, then a built-in default. Everyone's branches can
+differ; the task name never does.
+
+Never write a literal prefix into a doc, a PRD, or a plan. Run `/space config`
+to see what this machine resolves to, or read it off `/space add`'s output —
+it always prints the branch it actually created.
 
 ## The two gates
 

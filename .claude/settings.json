@@ -8,6 +8,8 @@
       "Bash(.claude/scripts/space.sh list *)",
       "Bash(.claude/scripts/space.sh report *)",
       "Bash(.claude/scripts/space.sh add *)",
+      "Bash(.claude/scripts/ccs.sh:*)",
+      "Bash(bash -n .claude/scripts/ccs.sh)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",

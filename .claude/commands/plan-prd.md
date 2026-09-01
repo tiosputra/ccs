@@ -178,7 +178,7 @@ corrections, when the space is created, and when a milestone flips to complete.
 | Task | `<task>` |
 | Space | `spaces/<task>/` |
 | Repos | backend, sport |
-| New branch | `ccs/<task>` (same name in every repo) |
+| New branch | `<prefix>/<task>` (same name in every repo) |
 | Source branch | `origin/feature/m5.1` |
 | Working directories | `spaces/<task>/backend/`, `spaces/<task>/sport/` |
 | PR base | `feature/m5.1` — one PR per repo |
@@ -246,7 +246,7 @@ PRD written: prds/<YYYY-MM-DD>_<task>.md
 Proposed space
   Task    <task>
   Repos   backend, sport
-  Branch  ccs/<task>
+  Branch  <prefix>/<task>
   From    origin/feature/m5.1
   Nothing created yet.
 
@@ -320,7 +320,7 @@ Uncommitted in: spaces/<task>/<repo>/   (nothing committed yet)
 Review findings left open:
   - {MEDIUM finding, or "none"}
 
-Ready to open the PR? That will stage, commit, push ccs/<task>, and open one PR
+Ready to open the PR? That will stage, commit, push <prefix>/<task>, and open one PR
 per repo against {source branch}. Or say what to change first.
 ```
 
