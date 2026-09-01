@@ -1,0 +1,42 @@
+# This repo ships the workspace *system* only — the rules, commands, skills and
+# scripts. Every directory below is tracked, and carries a README explaining
+# what belongs in it; the contents stay local, because they describe private
+# services and their production incidents.
+#
+# Note: each rule ignores `dir/*`, not `dir/` — git cannot re-include a file
+# whose parent directory is excluded, so the README would vanish with it.
+
+# ---------------------------------------------------------------- checkouts --
+# Canonical service checkouts, cloned per machine. Full clones of the private
+# services, carrying their own .env files and service-account keys.
+/repos/*
+!/repos/README.md
+
+# Task worktrees, created by .claude/scripts/space.sh and torn down at the end
+# of a task. Every file inside belongs to a service repo, not to this one.
+/spaces/*
+!/spaces/README.md
+
+# ------------------------------------------------------------ task history --
+# Wrap-up notes, one per finished task. Narrate real bugs and fixes.
+/space-log/*
+!/space-log/README.md
+
+# Release runbooks: commit-level state across the private repos.
+/release/*
+!/release/README.md
+
+# Per-task planning artifacts.
+/prds/*
+!/prds/README.md
+/plans/*
+!/plans/README.md
+
+# ----------------------------------------------------------------- tooling --
+# Per-machine Claude Code overrides. settings.json is shared; .local is not.
+.claude/settings.local.json
+
+# ------------------------------------------------------------------- noise --
+.DS_Store
+*.swp
+*~

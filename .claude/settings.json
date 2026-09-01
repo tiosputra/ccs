@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash -n .claude/scripts/space.sh)",
+      "Bash(.claude/scripts/space.sh -h)",
+      "Bash(.claude/scripts/space.sh slash *)",
+      "Bash(.claude/scripts/space.sh list)",
+      "Bash(.claude/scripts/space.sh list *)",
+      "Bash(.claude/scripts/space.sh report *)",
+      "Bash(.claude/scripts/space.sh add *)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch --show-current)",
+      "Bash(git rev-parse:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh auth status)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/scripts/guard.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}
