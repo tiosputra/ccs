@@ -1,6 +1,6 @@
 ---
 description: Restate requirements, assess risks, and create step-by-step implementation plan for a task's space. WAIT for user CONFIRM before touching any code.
-argument-hint: "[task description | path/to/<YYYY-MM-DD>_<task>.md]"
+argument-hint: "[task description | docs/<YYYY-MM-DD>_<task>/prd.md]"
 allowed-tools: Bash(.claude/scripts/space.sh:*), Read, Write, Edit, Glob, Grep
 ---
 
@@ -31,7 +31,7 @@ Use `/plan` when:
 
 A plan is only valid for one task's space. Resolve the binding before anything else.
 
-**From a PRD** (`prds/<YYYY-MM-DD>_<task>.md`): read its `## Task` table. That gives
+**From a PRD** (`docs/<YYYY-MM-DD>_<task>/prd.md`): read its `## Task` table. That gives
 the task name, repos, branch, and source branch. Confirm the space is really there:
 
 ```bash
@@ -82,33 +82,44 @@ The assistant will:
 
 | Input | Mode | Behavior |
 |---|---|---|
-| `prds/<YYYY-MM-DD>_<task>.md` | PRD artifact mode | Read the PRD's Task block and milestones, pick the next pending milestone, and write `plans/<task>-m<N>.plan.md` |
+| `docs/<YYYY-MM-DD>_<task>/prd.md` | PRD artifact mode | Read the PRD's Task block and milestones, pick the next pending milestone, and write the plan beside it in the same directory |
 | Any other markdown path | Reference mode | Read the file as context, bind the task per Step 0, produce an inline plan |
 | Free-form text | Conversational mode | Bind the task per Step 0, produce an inline plan |
 | Empty input | Clarification mode | Ask what should be planned |
 
-In PRD artifact mode, create `plans/` if needed.
+**The plan lives in the task's own directory**, next to the PRD it came from —
+`docs/<YYYY-MM-DD>_<task>/`. That directory already exists in PRD artifact mode: it is the
+one holding the PRD you were handed. Never create a second directory for the same task,
+and never guess its date — the PRD's path is the directory.
 
 **Naming — one plan per milestone.** A PRD's `Delivery Milestones` table is planned one row
-at a time, so each milestone gets its own file:
+at a time, so each milestone gets its own file in that directory:
 
-| Situation | Plan path |
+| Situation | Plan file |
 |---|---|
-| PRD with a milestones table | `plans/<task>-m<N>.plan.md` — `<N>` is the milestone's `#` |
-| PRD with no milestones table | `plans/<task>.plan.md` |
-| Free-form or reference mode | inline, or `plans/<task>.plan.md` if the user wants a file |
+| Milestone 1, or a PRD with no milestones table | `plan.md` |
+| Milestone `<N>`, `<N>` > 1 | `plan-m<N>.md` |
+| Free-form or reference mode | inline, or `docs/<date>_<task>/plan.md` if the user wants a file |
 
-Never write two milestones to the same path — milestone 2 must not overwrite the plan that
-produced milestone 1, because that plan is the record its TDD evidence report points back
-to. Before writing, `ls plans/<task>*` and pick the next free `<N>`.
+Milestone 1 is plain `plan.md` because most tasks only ever have one. The moment a second
+milestone is planned it becomes `plan-m2.md`; `plan.md` is never renamed.
+
+Never write two milestones to the same file — milestone 2 must not overwrite the plan that
+produced milestone 1, because that plan is the record its TDD evidence points back to.
+Before writing, `ls docs/*_<task>/` and see which plans are already there.
+
+In free-form mode there may be no task directory yet. Create `docs/<today>_<task>/` with
+today's `date +%F` only if the user wants the plan written to a file.
 
 If a plan for **this same milestone** already exists, read it and revise it in place. A
 different milestone always means a new file.
 
 Update only the selected row of the milestones table from `pending` to `in-progress`, and
-set that row's `Plan` cell to the path you just wrote — each row ends up pointing at its own
-plan. If the PRD uses the legacy `.claude/PRPs/prds/` format with `Implementation Phases`,
-read it without migrating paths.
+set that row's `Plan` cell to the filename you just wrote (`plan.md`, `plan-m2.md`) — each
+row ends up pointing at its own plan, and a bare filename is enough because it sits in the
+same directory. If the PRD uses an older layout — `.claude/PRPs/prds/` with `Implementation
+Phases`, or a top-level `prds/` and `plans/` pair — read it as it is; do not migrate a
+closed task's paths to satisfy the current convention.
 
 ## Pattern Grounding
 
@@ -128,7 +139,8 @@ If no similar code exists, state that explicitly. Do not invent a pattern.
 
 ## PRD Artifact Output
 
-When called with a PRD file (`prds/<YYYY-MM-DD>_<task>.md`), write the plan to `plans/<task>-m<N>.plan.md` using this structure.
+When called with a PRD file (`docs/<YYYY-MM-DD>_<task>/prd.md`), write the plan beside it —
+`plan.md` for milestone 1, `plan-m<N>.md` after that — using this structure.
 
 Dates come from `date +%F` — run it, never guess. *Created* is written once; *Last updated*
 is bumped on every later edit to the plan.
@@ -145,7 +157,7 @@ unknown.
 **Branch**: `<prefix>/<task>` from `origin/feature/m5.1`
 **Working directories**: `spaces/<task>/backend/`, `spaces/<task>/sport/`
 **Base commits**: backend `a1b2c3d4e`, sport `f5e6d7c8b`
-**Source PRD**: `prds/<YYYY-MM-DD>_<task>.md`
+**Source PRD**: `docs/<YYYY-MM-DD>_<task>/prd.md`
 **Selected Milestone**: {N} — {milestone name}
 **Complexity**: {Small | Medium | Large}
 **Created**: {YYYY-MM-DD} · **Last updated**: {YYYY-MM-DD}
@@ -194,11 +206,19 @@ cd spaces/<task>/<repo> && {project-specific validation command}
 ## Handoff
 <!-- What a space-blind skill or agent needs, and nothing more. -->
 
+**Evidence report**: `docs/<YYYY-MM-DD>_<task>/testing.md`
+
 | Consumer | Working directory | Base ref |
 |---|---|---|
 | tdd-workflow | `spaces/<task>/backend/` | — |
 | go-reviewer | `spaces/<task>/sport/` | `f5e6d7c8b` |
 ````
+
+The evidence report is one file for the whole task, not one per repo. `tdd-workflow` is
+space-blind and would otherwise write inside the working directory it was given, which
+would scatter the evidence across the service repos and put it in their PRs. Hand it that
+path explicitly, every time, for every repo: each run adds its own `## <repo>` section to
+the same file.
 
 After writing the artifact, report its path and WAIT for confirmation before writing code.
 
@@ -209,11 +229,12 @@ Task:  <task>
 Space: spaces/<task>/  (backend, sport)  branch <prefix>/<task>
 
 Milestone: {N} — {milestone name}
-Plan written: plans/<task>-m{N}.plan.md
+Plan written: docs/<date>_<task>/plan.md          (plan-m{N}.md for a later milestone)
 PRD updated: milestone {N} -> in-progress
 
-Next step (after you confirm): tdd-workflow skill with plans/<task>-m{N}.plan.md
+Next step (after you confirm): tdd-workflow skill with docs/<date>_<task>/plan.md
   -> pass it the working directory: spaces/<task>/<repo>/
+     and the evidence report path: docs/<date>_<task>/testing.md
      The skill takes the plan's tasks and Validate commands as intent, then proves
      each one through its own RED/GREEN gate. It knows the directory, not the space.
 ```
@@ -297,13 +318,17 @@ The workspace chain is:
 
 ```
 /space add <task> --from <ref>   ->  spaces/<task>/<repo>/
-/plan-prd                        ->  prds/<date>_<task>.md
-/plan                            ->  plans/<task>-m<N>.plan.md   (one per milestone)
-tdd-workflow skill               ->  implementation inside spaces/<task>/<repo>/
-/space remove <task>             ->  space-log/<date>-<task>.md, then teardown
+/plan-prd                        ->  docs/<date>_<task>/prd.md
+/plan                            ->  docs/<date>_<task>/plan.md   (plan-m2.md, ... per milestone)
+tdd-workflow skill               ->  implementation, evidence in docs/<date>_<task>/testing.md
+/space remove <task>             ->  docs/<date>_<task>/log.md, then teardown
 ```
 
-- **Need requirements first?** Use `/plan-prd` — it names the task, opens the space, and writes `prds/<date>_<task>.md`. Then pass that PRD back to `/plan`.
+Every artifact of a task lands in one directory, `docs/<date>_<task>/`. The date is the day
+the PRD was written; find an existing directory with `ls -d docs/*_<task>/` rather than
+reconstructing it.
+
+- **Need requirements first?** Use `/plan-prd` — it names the task, opens the space, and writes `docs/<date>_<task>/prd.md`. Then pass that PRD back to `/plan`.
 - **Ready to build?** Hand the generated plan to the `tdd-workflow` skill
   (`.claude/skills/tdd-workflow/SKILL.md`) with the plan path as its argument. The skill
   treats the plan as untrusted input: it converts each task into a failing test first, and

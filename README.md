@@ -25,9 +25,13 @@ swing/
 │   └── add-label/
 │       └── <service>/          -> repos/<service>  on <prefix>/add-label
 │
-├── prds/                   one PRD per task, <YYYY-MM-DD>_<task>.md
-├── plans/                  one plan per milestone, <task>-m<N>.plan.md
-├── space-log/              wrap-up notes, one per finished task
+├── docs/                   one directory per task - everything written about it
+│   └── 2026-08-28_add-label/
+│       ├── prd.md              requirements, confirmed at Gate 1
+│       ├── plan.md             milestone 1 (plan-m2.md, plan-m3.md follow)
+│       ├── testing.md          RED/GREEN evidence, one section per repo
+│       └── log.md              wrap-up, written just before teardown
+│
 ├── release/                deployment runbooks, one per release
 │
 ├── .claude/
@@ -74,14 +78,14 @@ One command runs a task end to end, stopping twice to ask you:
 ```
 /plan-prd add promo codes from branch origin/feature/m5.1
       |
-      |   writes prds/YYYY-MM-DD-add-promo-codes.md
+      |   writes docs/YYYY-MM-DD_add-promo-codes/prd.md
       |   the PRD proposes the space: repos, source branch, new branch, PR base
       |   nothing is created yet
       |
  [GATE 1]  you read the PRD and confirm - or correct the repos / source branch
       |
       |   space.sh add            -> spaces/add-promo-codes/<repo>/
-      |   /plan                   -> plans/add-promo-codes-m1.plan.md
+      |   /plan                   -> docs/<date>_add-promo-codes/plan.md
       |   tdd-workflow            -> implementation, RED/GREEN, evidence report
       |   go- / typescript-reviewer -> CRITICAL and HIGH findings fixed
       |
@@ -130,8 +134,8 @@ See what your branch prefix and default base resolve to:
 /space config
 ```
 
-Finish up. This writes `space-log/<task>.md` **before** removing anything, so
-the summary is captured while the diffs still exist:
+Finish up. This writes `docs/<date>_<task>/log.md` **before** removing anything,
+so the summary is captured while the diffs still exist:
 
 ```
 /space remove feature-booking
@@ -219,6 +223,19 @@ from. `.env.example` is the tracked template and lists every setting.
 Because the prefix differs per person, **no doc in this repo names one** —
 they all write `<prefix>/<task>`. Do not paste a real prefix into a PRD, a
 plan, or a README; it would be wrong for everyone else.
+
+### Editor search
+
+`repos/`, `spaces/` and `docs/` are all gitignored — their contents belong to
+the service repos, or describe private incidents. VS Code honours `.gitignore`,
+so out of the box cmd+P and the search panel could not see any of them.
+
+The tracked `.ignore` at the root fixes that. Search tools read it and give it
+precedence over `.gitignore` in the same directory; git never reads it, so what
+is tracked does not change. Every `.gitignore` *inside* a repo or worktree still
+applies, so `node_modules/` and `dist/` stay out of the results.
+`.vscode/settings.json` pins the settings that keep it working. Both files are
+tracked, so a fresh clone gets working search with no setup.
 
 ## Keeping the system honest
 

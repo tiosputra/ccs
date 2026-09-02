@@ -1,0 +1,29 @@
+{
+  // Quick Open (cmd+P) and the search panel use ripgrep, which honours
+  // .gitignore. The root .gitignore hides /repos/*, /spaces/* and /docs/*, so
+  // none of them were reachable. The /.ignore file at the workspace root negates
+  // those rules; ripgrep gives .ignore precedence over .gitignore in the same
+  // directory, and every .gitignore inside a repo or worktree still applies.
+  // Keep this true — flipping it off would also drag in node_modules/ and dist/.
+  "search.useIgnoreFiles": true,
+
+  // Only ignore files at or below the workspace root, never above it.
+  "search.useParentIgnoreFiles": false,
+  "search.useGlobalIgnoreFiles": false,
+
+  // Worktrees under spaces/ are real directories, so nothing here needs
+  // symlink following — and skipping it keeps the crawl cheap.
+  "search.followSymlinks": false,
+
+  // The file watcher does not read .gitignore; it needs these spelled out, or
+  // it tries to watch every dependency tree in repos/ and spaces/.
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/.next/**": true,
+    "**/dist/**": true,
+    "**/build/**": true,
+    "**/vendor/**": true
+  }
+}

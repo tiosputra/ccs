@@ -97,13 +97,23 @@ migrations.
 
 ### Planning artifacts
 
-Read these if they exist — they are the PR body's source material, and far better than
+Everything written about the task lives in one directory at the workspace root. Find it
+once, then read what is in it — it is the PR body's source material, and far better than
 inferring intent from a diff:
 
-- `prds/<YYYY-MM-DD>_<task>.md` — the problem, hypothesis, and milestone
-  (find it with `ls prds/*_<task>.md`; the date prefix is the day it was written)
-- `plans/<task>-m<N>.plan.md` — what was actually built
-- `spaces/<task>/<repo>/docs/testing/<name>.tdd.md` — the RED/GREEN evidence
+```bash
+ls -d docs/*_<task>/          # the date prefix is the day the task opened
+```
+
+- `docs/<date>_<task>/prd.md` — the problem, hypothesis, and milestone
+- `docs/<date>_<task>/plan.md` (or `plan-m<N>.md`) — what was actually built
+- `docs/<date>_<task>/testing.md` — the RED/GREEN evidence, one section per repo
+
+These are workspace files, not repo files: read them from the workspace root, never from
+inside the worktree, and never stage them. The evidence in particular **does not travel
+with the PR** — no reviewer can open `testing.md` from GitHub — so the PR body's Testing
+section has to carry the evidence itself. Lift that repo's section out of `testing.md`:
+what is guaranteed, and the commands that prove it. A link alone is not enough.
 
 ---
 
@@ -126,7 +136,7 @@ the file list:
 <why it changed — the PRD's problem statement in a sentence or two>
 
 Task: <task>
-Plan: plans/<task>-m<N>.plan.md
+Plan: docs/<date>_<task>/plan.md
 ```
 
 `<type>` is `feat`, `fix`, `refactor`, `test`, `docs`, or `chore`. `<scope>` is the area
@@ -180,12 +190,13 @@ write "N/A" rather than deleting one.
 
 ## Testing
 
-<the TDD evidence: what is guaranteed, and the commands that prove it>
+<this repo's section of testing.md, written out: what is guaranteed, and the commands
+that prove it. Not a link - the file is not in this repo and the reviewer cannot open it.>
 
 ## Related
 
-- PRD: `prds/<date>_<task>.md` — milestone <N>
-- Plan: `plans/<task>-m<N>.plan.md`
+- Task docs: `docs/<date>_<task>/` — PRD, plan, and evidence (workspace-local)
+- Milestone <N>
 - <sibling PRs in this task, if any>
 ```
 

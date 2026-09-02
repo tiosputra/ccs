@@ -174,6 +174,20 @@ check_settings() {
   [ "$bad" -eq 0 ] && ok settings "valid, guard wired, permissions point at real scripts"
 }
 
+check_guard() {
+  # The guard is the only enforcement in the workspace, and it is regexes over
+  # raw command text - so the check is not "does it exist" but "does it still
+  # block what it must and pass what it must". guard-test.sh holds the cases;
+  # a failure names them.
+  local t="$SCRIPT_DIR/guard-test.sh" out
+  [ -x "$t" ] || { finding med guard "guard-test.sh is missing - the guard's behaviour is unpinned"; return 0; }
+  out="$("$t" -q 2>/dev/null | tail -1)"
+  case "$out" in
+    *fail=0) ok guard "${out%%	*} guard cases pass - repos/ sealed, reads unblocked" ;;
+    *)       finding high guard "guard-test.sh reports $out - run .claude/scripts/guard-test.sh for the failing cases" ;;
+  esac
+}
+
 check_config() {
   # Per-machine settings live in a gitignored .env. The check is not "is the
   # prefix ccs" - there is no right value any more - it is whether the
@@ -206,7 +220,7 @@ check_doc_prefix() {
     [ -f "$f" ] || continue
     for hit in $(grep -ohE '[a-z][a-z0-9-]*/<task>' "$f" 2>/dev/null | sort -u); do
       case "${hit%%/*}" in
-        spaces|plans|prds|repos|space-log|docs|testing|release) continue ;;
+        spaces|repos|docs|release|testing) continue ;;
       esac
       finding med docs "${f#$ROOT/} hardcodes '$hit' - the prefix is per machine, write '<prefix>/<task>'"
       bad=$((bad + 1))
@@ -218,40 +232,39 @@ check_doc_prefix() {
 check_branch_prefix() {
   # Open work only. A closed task's PRD, plan and log record what happened
   # under whatever prefix applied then; rewriting them to satisfy a check
-  # would be falsifying the record, so they are skipped.
-  local f task pfx bad=0 closed
-  closed=" $(ls "$ROOT"/space-log/*.md 2>/dev/null \
-             | sed -e 's|.*/||' -e 's|\.md$||' -e 's|^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}-||' \
-             | tr '\n' ' ') "
-  for f in "$ROOT"/prds/*.md "$ROOT"/plans/*.md; do
-    [ -f "$f" ] || continue
-    case "$(basename "$f")" in README.md) continue;; esac
-    task="$(basename "$f" .md)"
-    task="${task#*_}"
-    task="${task%-m[0-9]*.plan}"
+  # would be falsifying the record, so they are skipped. A task is closed once
+  # its directory holds a log.md - that is written just before teardown.
+  local d f task pfx bad=0
+  for d in "$ROOT"/docs/*_*/; do
+    [ -d "$d" ] || continue
+    [ -f "$d/log.md" ] && continue
+    task="$(basename "$d")"; task="${task#*_}"
     [ -n "$task" ] || continue
-    case "$closed" in *" $task "*) continue;; esac
-    for pfx in $(grep -ohE "[a-z][a-z0-9-]*/$task\b" "$f" 2>/dev/null | sed 's|/.*||' | sort -u); do
-      case "$pfx" in origin|refs|remotes|spaces|plans|prds) continue;; esac
-      if [ "$pfx" != "$BRANCH_PREFIX" ]; then
-        finding med branch "${f#$ROOT/} names the branch '$pfx/$task', but this machine resolves '$BRANCH_PREFIX/' - a PRD should say '<prefix>/<task>'"
-        bad=$((bad + 1))
-      fi
+    for f in "$d"prd.md "$d"plan*.md; do
+      [ -f "$f" ] || continue
+      for pfx in $(grep -ohE "[a-z][a-z0-9-]*/$task\b" "$f" 2>/dev/null | sed 's|/.*||' | sort -u); do
+        # Path segments, not branch prefixes: a plan naming
+        # docs/testing/... must not read as a branch called 'testing'.
+        case "$pfx" in origin|refs|remotes|spaces|repos|docs|testing|release) continue;; esac
+        if [ "$pfx" != "$BRANCH_PREFIX" ]; then
+          finding med branch "${f#$ROOT/} names the branch '$pfx/$task', but this machine resolves '$BRANCH_PREFIX/' - a PRD should say '<prefix>/<task>'"
+          bad=$((bad + 1))
+        fi
+      done
     done
   done
   [ "$bad" -eq 0 ] && ok branch "no open task artifact pins a branch prefix"
 }
 
 check_legacy_branches() {
-  # Task branches left over from an earlier prefix. Read-only: `for-each-ref`
-  # rather than `git branch`, which the guard blocks against repos/ even to
-  # list. These are the user's to rename or delete - some carry commits that
-  # exist on no remote - so they are reported, never touched.
+  # Task branches left over from an earlier prefix. `for-each-ref` gives a
+  # stable machine-readable format, which is why it is used here; the guard now
+  # also permits `git branch --list` against repos/. These branches are the
+  # user's to rename or delete - some carry commits that exist on no remote -
+  # so they are reported, never touched.
   local tasks task repo ref pfx bad=0
-  tasks="$( { ls "$ROOT"/prds/*.md "$ROOT"/plans/*.md "$ROOT"/space-log/*.md 2>/dev/null || true; } \
-            | sed -e 's|.*/||' -e 's|\.md$||' \
-                  -e 's|^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}-||' -e 's|^[0-9-]*_||' \
-                  -e 's|-m[0-9]*\.plan$||' \
+  tasks="$( { ls -d "$ROOT"/docs/*_*/ 2>/dev/null || true; } \
+            | sed -e 's|/$||' -e 's|.*/||' -e 's|^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}_||' \
             | sort -u)"
   for repo in $(all_repo_names); do
     while read -r ref; do
@@ -270,13 +283,37 @@ EOF
 }
 
 check_artifacts() {
-  local log task bad=0 space
-  for log in "$ROOT"/space-log/*.md; do
+  # One task, one directory: docs/<YYYY-MM-DD>_<task>/ holding prd.md, plan.md,
+  # plan-m<N>.md, testing.md and log.md. Anything else in docs/ is a stray.
+  local log d f name task bad=0 space entry
+  for entry in "$ROOT"/docs/*; do
+    [ -e "$entry" ] || continue
+    name="$(basename "$entry")"
+    [ "$name" = "README.md" ] && continue
+    if [ ! -d "$entry" ]; then
+      finding med artifacts "docs/$name is a loose file - every task artifact belongs in docs/<YYYY-MM-DD>_<task>/"
+      bad=$((bad + 1))
+      continue
+    fi
+    case "$name" in
+      [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_?*) ;;
+      *) finding med artifacts "docs/$name is not named <YYYY-MM-DD>_<task> - the date is the day the task opened"
+         bad=$((bad + 1)); continue ;;
+    esac
+    for f in "$entry"/*; do
+      [ -e "$f" ] || continue
+      case "$(basename "$f")" in
+        prd.md|plan.md|log.md|testing.md|plan-m[0-9]*.md) ;;
+        *) finding low artifacts "docs/$name/$(basename "$f") is not one of prd.md, plan.md, plan-m<N>.md, testing.md, log.md"
+           bad=$((bad + 1)) ;;
+      esac
+    done
+  done
+  for log in "$ROOT"/docs/*_*/log.md; do
     [ -f "$log" ] || continue
-    case "$(basename "$log")" in README.md) continue;; esac
-    task="$(basename "$log" .md | sed 's/^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}-//')"
-    if ! ls "$ROOT"/prds/*_"$task".md >/dev/null 2>&1; then
-      finding low artifacts "space-log/$(basename "$log") has no PRD - '$task' ran outside the documented flow"
+    d="$(dirname "$log")"; name="$(basename "$d")"; task="${name#*_}"
+    if [ ! -f "$d/prd.md" ]; then
+      finding low artifacts "docs/$name/log.md has no prd.md - '$task' ran outside the documented flow"
       bad=$((bad + 1))
     fi
   done
@@ -290,12 +327,15 @@ check_artifacts() {
       bad=$((bad + 1))
     fi
   done
-  [ "$bad" -eq 0 ] && ok artifacts "logs trace back to PRDs and no orphan spaces remain"
+  [ "$bad" -eq 0 ] && ok artifacts "every task doc sits in docs/<date>_<task>/, logs trace back to PRDs, no orphan spaces"
 }
 
 check_notes() {
   local n=0
-  [ -f "$NOTES" ] && n="$(grep -c '^- \[ \]' "$NOTES" 2>/dev/null || echo 0)"
+  # `grep -c` prints 0 and exits 1 when nothing matches, so a `|| echo 0`
+  # fallback appends a second line and breaks the comparison below.
+  [ -f "$NOTES" ] && n="$(grep -c '^- \[ \]' "$NOTES" 2>/dev/null)"
+  [ -n "$n" ] || n=0
   if [ "$n" -gt 0 ]; then
     printf 'notes\t%s\topen improvement notes recorded during real runs\n' "$n"
   else
@@ -311,6 +351,7 @@ cmd_check() {
   check_commands
   check_skills
   check_settings
+  check_guard
   check_docs_commands
   check_config
   check_doc_prefix

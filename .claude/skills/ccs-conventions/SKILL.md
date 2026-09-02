@@ -140,6 +140,19 @@ The unit of work is a task. Do not introduce a second word for it, and do not
 add a command named for a concept an existing command already owns — `/space`
 owns spaces, so a `space-manager` beside it splits the concept in two.
 
+**One task, one directory.** Everything written about a task lives in
+`docs/<YYYY-MM-DD>_<task>/`: `prd.md`, `plan.md` (then `plan-m2.md`,
+`plan-m3.md`), `testing.md`, `log.md`. If a new kind of task document comes
+along, it becomes another file in that directory — never a new top-level
+directory beside it, and never a copy inside a service repo. The date is the day
+the task opened and never changes, so commands find a directory by globbing
+`docs/*_<task>/` and never by reconstructing its name.
+
+The one artifact that is easy to get wrong is the TDD evidence. `tdd-workflow`
+is space-blind and writes wherever it is told; if nobody tells it, it writes
+inside the service repo and the evidence ends up in that repo's pull request,
+split per service. Whoever invokes it passes the report path.
+
 ## Settings are per machine, and no tracked file names one
 
 Branch prefix and default base ref differ per person. They resolve through
@@ -183,29 +196,48 @@ one. Finish a task under the prefix it started with.
 is not a matter of judgment. Everything else in `.claude/` is advice a session
 can talk itself out of.
 
-It matches on the shape of a command, not on what the command would really do,
-so it blocks some read-only work. Known cases, all worked around rather than
-weakened — an over-eager guard is the right failure direction:
+It reads command text rather than a parsed shell, so its precision is a design
+choice rather than a guarantee. It aims to be exact in both directions: a write
+that slips through is the obvious failure, but a read wrongly refused is a tax
+on every session, and for a while it charged one.
 
-- Reading is fine. `grep`, `find`, `cat`, `git log`, `git status`, and
-  `git for-each-ref` against `repos/` all pass.
-- `cd repos/… && <anything containing a redirect>` is blocked, including a
-  harmless `2>/dev/null`, because the `cd` rule treats any `>` as a write.
-  **Read by absolute path instead of `cd`-ing** and it never comes up.
-- `git -C repos/X branch --list` is blocked: `branch` is in the mutating-verb
-  list, though `--list` and `--merged` only read. **Use `for-each-ref`.**
-- Any command text containing a `repos/` path just after an ASCII arrow reads
-  as a redirection into `repos/` — so a heredoc documenting
-  `spaces/x/backend -> repos/backend` is refused. **Put that content in a file
-  and run the file**, rather than passing it as a command string.
+What passes:
+
+- Reading. `grep`, `find`, `cat`, `git log`, `git status`, `git diff`,
+  `git show`, `git for-each-ref` against `repos/` all pass.
+- **Redirects whose target is not inside a checkout.** `cd repos/backend && ls
+  2>/dev/null` is fine, as are `2>&1`, `> /tmp/out`, and a write into
+  `spaces/`. The guard resolves each redirect target against the directory the
+  command `cd`-ed into, so only one that genuinely lands in `repos/` is refused.
+- **Read-only forms of the dual verbs.** `branch`, `tag`, `worktree` and
+  `stash` each have a form that only reports: `git -C repos/X branch --list`,
+  `-a`, `--merged`, `--show-current`, `tag -l`, `worktree list`, `stash list`,
+  and bare `git branch` / `git tag`. Their mutating forms — `branch -d`,
+  `branch -m`, a bare new branch name, `worktree add`, `stash pop` — are
+  blocked as before.
+- **An ASCII arrow is not a redirect.** `->` and `=>` never introduce one in
+  shell, so a heredoc or a printed line reading
+  `spaces/x/backend -> repos/backend` passes.
+- **`repos/README.md`.** It is tracked here (the gitignore un-ignores it) and
+  describes the roster rather than living inside a checkout, so it is writable
+  from a session. `repos/` itself, every `repos/<repo>/…` path, and a lookalike
+  such as `repos/README.md.bak` stay sealed.
 - `git add`/`commit`/`push` are expected inside a space and blocked in `repos/`.
 
-One consequence with no workaround: `repos/README.md` is tracked (the gitignore
-un-ignores it) but unwritable from a session. Editing it is the user's to do.
+Residual cases, still worked around rather than weakened — an over-eager guard
+is the right failure direction:
 
-If you change the guard, hand-test it with the payload in its header comment.
-A guard that exits non-zero on a malformed payload bricks the session, which is
-why it fails open on anything unexpected — keep that property.
+- A **literal `> repos/backend/f.txt` inside a heredoc body** is still read as a redirect,
+  because the guard does not track heredoc boundaries. Put that content in a
+  file and run the file.
+- Deep quoting, `eval`, and command substitution can still fool the text match
+  either way. Nothing here is a substitute for not trying.
+
+If you change the guard, run the full battery, not one payload — every
+relaxation above is one a plausible regex change would undo silently. The
+header comment carries a single hand-test payload for a smoke check. A guard
+that exits non-zero on a malformed payload bricks the session, which is why it
+fails open on anything unexpected — keep that property.
 
 ## Improving the system
 
@@ -224,7 +256,8 @@ Two design rules the checks themselves follow, worth keeping if you add more:
 
 - **Never make a check that can only be satisfied by rewriting history.** Closed
   tasks' PRDs, plans and logs record what happened under whatever rule applied
-  then. The branch-prefix check skips closed tasks for exactly this reason —
+  then. A task counts as closed once its directory holds a `log.md`, written
+  just before teardown. The branch-prefix check skips those for that reason —
   otherwise it would report the same permanent findings forever, and the only
   way to silence it would be to falsify the record.
 - **Prefer checking that a doc points at the truth over checking that it repeats

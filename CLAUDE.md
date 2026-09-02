@@ -36,14 +36,31 @@ the same thing in this workspace. Everything under `.claude/` calls it a
 |---|---|
 | Space (worktrees) | `spaces/<task>/<repo>/` |
 | Branch | `<prefix>/<task>` — see below |
-| PRD | `prds/<YYYY-MM-DD>_<task>.md` |
-| Plan | `plans/<task>-m<N>.plan.md` (one per PRD milestone) |
-| TDD evidence | `spaces/<task>/<repo>/docs/testing/<task>.tdd.md` |
-| Wrap-up log | `space-log/<YYYY-MM-DD>-<task>.md` |
+| Task docs | `docs/<YYYY-MM-DD>_<task>/` — everything written about the task |
+| PRD | `docs/<YYYY-MM-DD>_<task>/prd.md` |
+| Plan | `docs/<YYYY-MM-DD>_<task>/plan.md`, then `plan-m2.md`, `plan-m3.md` per later milestone |
+| TDD evidence | `docs/<YYYY-MM-DD>_<task>/testing.md` — one section per repo |
+| Wrap-up log | `docs/<YYYY-MM-DD>_<task>/log.md` |
 | Pull request | one per repo in the space, branch `<prefix>/<task>` -> the source branch |
 
 Pick the task name once, in kebab-case, at `/plan-prd` (or at `/space add`) and
 never rename it mid-flight.
+
+**One task, one directory.** Every document a task produces lives in
+`docs/<YYYY-MM-DD>_<task>/` — no artifact goes anywhere else, and nothing else
+goes in there. The date is the day the task opened (the day its PRD was written)
+and never changes afterwards; a plan or a log written weeks later still belongs
+to that directory. Because the date is not derivable from the task name, always
+find the directory by globbing:
+
+```bash
+ls -d docs/*_<task>/
+```
+
+Evidence is the one artifact that used to live inside the service repo, at
+`docs/testing/<name>.tdd.md`. It does not any more: one `testing.md` covers the
+whole task, with a section per repo, so a task spanning three services has one
+report rather than three.
 
 `<prefix>` is **not a fixed string** and no file in this repo states it. It is
 `SPACE_BRANCH_PREFIX`, resolved per machine: the environment, then a gitignored
@@ -60,7 +77,7 @@ A task runs start to finish in one session, stopping at exactly two points to as
 
 ```
 /plan-prd <idea> from branch <ref>
-   writes prds/<date>_<task>.md - proposing the space, not creating it
+   writes docs/<date>_<task>/prd.md - proposing the space, not creating it
         |
    [GATE 1] you read the PRD and confirm
         |

@@ -94,4 +94,4 @@ obvious, but do not turn a list of eight lines into a roadmap.
 
 - Anything about a service repo's code. That is a task; it needs a PRD and a space.
 - Sweeping refactors of `.claude/`. One increment per run.
-- Rewriting closed `space-log/` entries. Those are history, not documentation.
+- Rewriting a closed task's `docs/<date>_<task>/log.md`. Those are history, not documentation.

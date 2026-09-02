@@ -17,20 +17,15 @@
 /spaces/*
 !/spaces/README.md
 
-# ------------------------------------------------------------ task history --
-# Wrap-up notes, one per finished task. Narrate real bugs and fixes.
-/space-log/*
-!/space-log/README.md
+# ----------------------------------------------------------------- task docs --
+# One directory per task - prd.md, plan.md, log.md, testing.md. They narrate real
+# bugs and fixes in the private services, so only the README is tracked.
+/docs/*
+!/docs/README.md
 
 # Release runbooks: commit-level state across the private repos.
 /release/*
 !/release/README.md
-
-# Per-task planning artifacts.
-/prds/*
-!/prds/README.md
-/plans/*
-!/plans/README.md
 
 # ----------------------------------------------------------------- tooling --
 # Per-machine Claude Code overrides. settings.json is shared; .local is not.

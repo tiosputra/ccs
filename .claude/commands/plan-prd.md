@@ -54,14 +54,15 @@ Derive a kebab-case `<task>` name from the idea (short, 2–4 words: `offline-sy
 
 ```bash
 .claude/scripts/space.sh list
-ls prds/ 2>/dev/null
-ls prds/*_<task>.md 2>/dev/null   # a PRD for this task, whatever day it was written
+ls -d docs/*/ 2>/dev/null
+ls -d docs/*_<task>/ 2>/dev/null   # this task's directory, whatever day it opened
 ```
 
 - If a space named `<task>` already exists, reuse it — do not create a second one, and do
   not rename the task. Say so in the PRD.
-- If a PRD for `<task>` already exists, read it and offer to continue it rather than
-  overwriting.
+- If a directory for `<task>` already exists, read the `prd.md` in it and offer to
+  continue that task rather than overwriting. Never open a second directory for a task
+  that already has one, and never re-date the one it has.
 
 **The source branch is required and never guessed.** If `$ARGUMENTS` contained one, use it
 and confirm it back. If it did not, ask — and ask again rather than defaulting to
@@ -144,20 +145,22 @@ settle it before any branch exists.
 ### Phase 4 — WRITE THE PRD
 
 ```bash
-mkdir -p prds
-date +%F          # the PRD is dated - never guess or reuse a date from memory
+date +%F                              # never guess or reuse a date from memory
+mkdir -p docs/<YYYY-MM-DD>_<task>
 ```
 
-**Output path**: `prds/<YYYY-MM-DD>_<task>.md`, where the date is today's `date +%F`
-and `<task>` is the kebab-case task name — e.g. `prds/2026-08-28_offline-sync.md`.
-Still nothing created but this file.
+**Output path**: `docs/<YYYY-MM-DD>_<task>/prd.md`, where the date is today's `date +%F`
+and `<task>` is the kebab-case task name — e.g.
+`docs/2026-08-28_offline-sync/prd.md`. This directory is where every later artifact of the
+task goes too: `plan.md`, `testing.md`, `log.md`. Creating it is the one write this phase
+makes; no space, no branch, no code.
 
-The date in the filename is the day the PRD was **created** and never changes afterwards.
-A PRD edited later keeps its original filename; only the *Last updated* line moves. Never
-rename a PRD to a newer date — the plan, the space and the PR all point at that path.
+The date in the directory name is the day the task **opened** and never changes afterwards.
+A PRD edited later keeps its directory; only the *Last updated* line moves. Never re-date
+the directory — the plans, the evidence, the log and the PR all point into it.
 
 Because the date prefix is not derivable from the task name, always **glob** for an
-existing PRD (`prds/*_<task>.md`) rather than guessing the filename.
+existing directory (`ls -d docs/*_<task>/`) rather than guessing the path.
 
 Both dates come from `date +%F` in `YYYY-MM-DD`. *Created* is written once and never
 changes; *Last updated* is bumped every time the file is edited afterwards — at Gate 1
@@ -241,7 +244,7 @@ Report, then **stop**. Do not create the space. Do not write code. The user aske
 pause so they can open the file and read it.
 
 ```
-PRD written: prds/<YYYY-MM-DD>_<task>.md
+PRD written: docs/<YYYY-MM-DD>_<task>/prd.md
 
 Proposed space
   Task    <task>
@@ -285,13 +288,18 @@ Now run straight through. No further permission prompts; Gate 1 covered all of t
    Then update the PRD: replace *Space to create* with the real values, change the
    status line to `Status: IN PROGRESS`, and bump *Last updated* to today's `date +%F`.
 
-2. **Plan the next pending milestone** — follow `/plan`'s PRD artifact mode. Write
-   `plans/<task>-m<N>.plan.md` with working directories and base commits filled in,
-   and flip that milestone's row to `in-progress`.
+2. **Plan the next pending milestone** — follow `/plan`'s PRD artifact mode. Write the plan
+   beside the PRD, in the same directory: `plan.md` for milestone 1, `plan-m<N>.md` after
+   that, with working directories and base commits filled in. Flip that milestone's row to
+   `in-progress`.
 
 3. **Implement it** with the `tdd-workflow` skill, once per repo the milestone touches.
-   Hand it the plan path and the working directory — `spaces/<task>/<repo>/`. The skill is
-   space-blind: give it a directory, never a task name.
+   Hand it three things: the plan path, the working directory `spaces/<task>/<repo>/`, and
+   the evidence report path `docs/<YYYY-MM-DD>_<task>/testing.md`. The skill is space-blind
+   — give it directories and paths, never a task name — and it writes its evidence wherever
+   it is told, so passing that path is what keeps the whole task's evidence in one file
+   instead of scattering a copy into each service repo. Every repo appends its own
+   `## <repo>` section to that same file.
 
 4. **Review it.** Dispatch by language, giving each reviewer the working directory and the
    base commit from the PRD:
@@ -313,8 +321,8 @@ Done: <task> — milestone {N}, {milestone name}
   {repo}   {n} files changed   tests {pass/total}   review {clean | n findings}
   {repo}   {n} files changed   tests {pass/total}   review {clean | n findings}
 
-Evidence:  spaces/<task>/<repo>/docs/testing/<name>.tdd.md
-Plan:      plans/<task>-m{N}.plan.md
+Evidence:  docs/<date>_<task>/testing.md   ({n} repo sections)
+Plan:      docs/<date>_<task>/plan.md      (plan-m{N}.md for a later milestone)
 Uncommitted in: spaces/<task>/<repo>/   (nothing committed yet)
 
 Review findings left open:
@@ -333,7 +341,7 @@ If milestones remain, offer the next one after the PR is open.
 
 ```
 /plan-prd <idea> from branch <ref>
-      |         writes prds/<date>_<task>.md   <- nothing created yet
+      |         writes docs/<date>_<task>/prd.md   <- nothing else created yet
    [GATE 1]     you read it and confirm
       |         space.sh add -> /plan -> tdd-workflow -> reviewer agents
    [GATE 2]     you confirm it is ready
@@ -357,7 +365,8 @@ If milestones remain, offer the next one after the PR is open.
 - **HYPOTHESIS_TESTABLE**: measurable outcome included.
 - **SCOPE_BOUNDED**: explicit MVP and explicit out-of-scope.
 - **QUESTIONS_ASKED_NOT_PARKED**: every uncertainty the user could answer was asked in the terminal before the PRD was written; Open Questions holds only what needs data, a spike, or a third party — each with the method that settles it.
-- **PRD_FILENAME_DATED**: the PRD is written to `prds/<YYYY-MM-DD>_<task>.md` with the date from `date +%F`; existing PRDs are found by globbing `*_<task>.md`, never by guessing a date.
+- **ONE_TASK_ONE_DIRECTORY**: every artifact of the task — PRD, plans, evidence, log — is written inside `docs/<YYYY-MM-DD>_<task>/`, and nothing of this task is written anywhere else.
+- **PRD_DIRECTORY_DATED**: the directory is `docs/<YYYY-MM-DD>_<task>/` with the date from `date +%F`; an existing one is found by globbing `docs/*_<task>/`, never by guessing a date, and never re-dated.
 - **PRD_DATED**: the PRD carries *Created* and *Last updated* dates in `YYYY-MM-DD`, taken from `date +%F`, and *Last updated* is bumped on every later edit.
 - **NO_REPOS_PATHS**: no path under `repos/` appears anywhere in the PRD.
 - **NOTHING_COMMITTED_BEFORE_GATE_2**: the build leaves work uncommitted; `/pr` commits it.

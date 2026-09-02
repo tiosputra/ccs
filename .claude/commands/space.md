@@ -26,12 +26,15 @@ reused everywhere, so a task is one word across the whole workspace:
 |---|---|
 | Space (worktrees) | `spaces/<task>/<repo>/` |
 | Branch | `<prefix>/<task>` — `<prefix>` is per machine, see `/space config` |
-| PRD | `prds/<YYYY-MM-DD>_<task>.md` |
-| Plan | `plans/<task>-m<N>.plan.md` |
-| TDD evidence | `spaces/<task>/<repo>/docs/testing/<task>.tdd.md` |
-| Wrap-up log | `space-log/<YYYY-MM-DD>-<task>.md` |
+| Task docs | `docs/<YYYY-MM-DD>_<task>/` — one directory for everything written |
+| PRD | `docs/<YYYY-MM-DD>_<task>/prd.md` |
+| Plan | `docs/<YYYY-MM-DD>_<task>/plan.md`, then `plan-m2.md` per later milestone |
+| TDD evidence | `docs/<YYYY-MM-DD>_<task>/testing.md` — one section per repo |
+| Wrap-up log | `docs/<YYYY-MM-DD>_<task>/log.md` |
 
-Pick the name once and never rename it mid-flight.
+Pick the name once and never rename it mid-flight. The date in the docs
+directory is the day the task opened and never changes; find an existing one
+with `ls -d docs/*_<task>/`, never by guessing the date.
 
 **Repo aliases are read from disk, never from a list in this file.** Any git
 checkout directly under `repos/` is a repo and its directory name is its alias;
@@ -91,9 +94,9 @@ The session is now bound to this task. Point at what comes next, using the same
 task name throughout:
 
 ```
-/plan-prd <idea>                  -> prds/<date>_<task>.md  (also opens the space)
-/plan prds/<date>_<task>.md -> plans/<task>-m<N>.plan.md
-tdd-workflow <plan path>          -> implementation inside spaces/<task>/<repo>/
+/plan-prd <idea>                    -> docs/<date>_<task>/prd.md  (also opens the space)
+/plan docs/<date>_<task>/prd.md     -> docs/<date>_<task>/plan.md
+tdd-workflow <plan path>            -> implementation inside spaces/<task>/<repo>/
 ```
 
 ### mode: list — nothing else to do
@@ -142,14 +145,21 @@ unless it is `1`.
 
 #### 2. Write the log
 
-Name the file `space-log/<YYYY-MM-DD>-<task>.md`, e.g.
-`space-log/2026-08-28-fix-promo.md`. Take the date from the report's `today`
-line — that is the day the space closed, and it keeps the directory sorted
-chronologically. Do not use a date from memory.
+The log belongs in the task's own directory, as
+`docs/<YYYY-MM-DD>_<task>/log.md`. The report's `docs` line names that directory
+— a task that came through `/plan-prd` already has one, holding its PRD and its
+plans, and the log joins them there.
 
-Check for an earlier log of the same task first (`ls space-log/*-<task>.md`).
-If one exists, read it and revise it under its existing name rather than
-creating a second file. Use this shape:
+If the `docs` line reads `-`, this task ran outside the documented flow and has
+no directory yet. Create `docs/<today>_<task>/` using the report's `today` line
+— never a date from memory — and say in your report that the task had no PRD.
+
+The date in that directory name is the day the task **opened**, so an existing
+directory keeps its name no matter how long the task ran. Never rename one to
+the closing date; the closing date goes inside the file.
+
+If `log.md` is already there, read it and revise it in place rather than
+appending a second wrap-up. Use this shape:
 
 ```markdown
 # <task>

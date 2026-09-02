@@ -35,7 +35,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REPOS_DIR="$ROOT/repos"
 SPACES_DIR="$ROOT/spaces"
-SPACE_LOG_DIR="$ROOT/space-log"
+DOCS_DIR="$ROOT/docs"
 
 . "$SCRIPT_DIR/config.sh"
 cfg_resolve SPACE_BRANCH_PREFIX ccs
@@ -360,6 +360,17 @@ cmd_report() {
   printf 'space\t%s\n' "$task"
   printf 'path\t%s\n' "$space"
   printf 'today\t%s\n' "$(date '+%Y-%m-%d')"
+
+  # Where this task's docs live: docs/<YYYY-MM-DD>_<task>/. The date is the day
+  # the task opened, so it cannot be derived - it is globbed. `-` means the task
+  # never had a PRD, and whoever writes the log creates the directory.
+  local d docdir=""
+  for d in "$DOCS_DIR"/*_"$task"/; do
+    [ -d "$d" ] || continue
+    docdir="${d#$ROOT/}"; docdir="${docdir%/}"
+    break
+  done
+  printf 'docs\t%s\n' "${docdir:--}"
   if [ -f "$meta" ]; then
     grep -E '^(branch|created)	' "$meta" || true
   fi
