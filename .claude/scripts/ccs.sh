@@ -245,7 +245,10 @@ check_branch_prefix() {
       for pfx in $(grep -ohE "[a-z][a-z0-9-]*/$task\b" "$f" 2>/dev/null | sed 's|/.*||' | sort -u); do
         # Path segments, not branch prefixes: a plan naming
         # docs/testing/... must not read as a branch called 'testing'.
-        case "$pfx" in origin|refs|remotes|spaces|repos|docs|testing|release) continue;; esac
+        # The .claude/ subdirectories are here for the same reason - machinery
+        # work is named after the artifact it builds, so a PRD for a command
+        # called X legitimately writes commands/X and scripts/X.
+        case "$pfx" in origin|refs|remotes|spaces|repos|docs|testing|release|commands|scripts|skills|agents) continue;; esac
         if [ "$pfx" != "$BRANCH_PREFIX" ]; then
           finding med branch "${f#$ROOT/} names the branch '$pfx/$task', but this machine resolves '$BRANCH_PREFIX/' - a PRD should say '<prefix>/<task>'"
           bad=$((bad + 1))

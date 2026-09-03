@@ -10,6 +10,8 @@
       "Bash(.claude/scripts/space.sh add *)",
       "Bash(.claude/scripts/ccs.sh:*)",
       "Bash(bash -n .claude/scripts/ccs.sh)",
+      "Bash(.claude/scripts/release-notes.sh:*)",
+      "Bash(bash -n .claude/scripts/release-notes.sh)",
       "Bash(.claude/scripts/guard-test.sh)",
       "Bash(.claude/scripts/guard-test.sh -q)",
       "Bash(bash -n .claude/scripts/guard-test.sh)",
@@ -21,6 +23,7 @@
       "Bash(gh pr view:*)",
       "Bash(gh pr list:*)",
       "Bash(gh pr checks:*)",
+      "Bash(gh pr diff:*)",
       "Bash(gh auth status)"
     ]
   },
