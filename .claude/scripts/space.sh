@@ -17,7 +17,12 @@
 #   space.sh remove <task> [repos] [--delete-branch] [--force]
 #   space.sh slash <args...>        dispatcher for the /space command
 #
-#   repos   comma list of aliases - `space.sh repos` lists them. Default: all.
+#   Repos named in REFERENCE_REPOS (.env, comma list) are read-only: they get
+#   no worktree, and the guard hook refuses writes to them anywhere. They are
+#   there to be read and asked about, not worked on.
+#
+#   repos   comma list of aliases - `space.sh repos` lists them. Default:
+#           every checkout except the reference-only ones.
 #   --from  base ref for NEW branches. Either one ref for everything
 #           (--from origin/main) or per-repo overrides
 #           (--from backend=origin/release-2,sport=origin/main).
@@ -40,6 +45,7 @@ DOCS_DIR="$ROOT/docs"
 . "$SCRIPT_DIR/config.sh"
 cfg_resolve SPACE_BRANCH_PREFIX ccs
 cfg_resolve SPACE_DEFAULT_BASE origin/main
+cfg_resolve REFERENCE_REPOS ""
 BRANCH_PREFIX="$SPACE_BRANCH_PREFIX"
 DEFAULT_BASE="$SPACE_DEFAULT_BASE"
 # Untracked-but-essential files copied from the main checkout into a new
@@ -64,7 +70,7 @@ fail() { printf '  %sx%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; }
 dim()  { printf '    %s%s%s\n' "$C_DIM" "$*" "$C_RESET"; }
 die()  { printf '%serror:%s %s\n' "$C_RED$C_BOLD" "$C_RESET" "$*" >&2; exit 1; }
 
-usage() { sed -n '3,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '3,35p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 # ----------------------------------------------------------------- repos --
 
@@ -74,6 +80,24 @@ all_repos() {
   for d in "$REPOS_DIR"/*/; do
     [ -e "$d/.git" ] || continue
     basename "$d"
+  done
+}
+
+# Repos kept for reference only - read, search, ask questions, never edit.
+# REFERENCE_REPOS is a comma list of aliases; guard.sh reads the same setting
+# and seals both repos/<repo> and spaces/<task>/<repo>.
+is_reference_repo() {
+  local want="$1" list
+  list=",${REFERENCE_REPOS//[[:space:]]/},"
+  case "$list" in *",$want,"*) return 0 ;; esac
+  return 1
+}
+
+# The repos a space may actually open a worktree for.
+workable_repos() {
+  local r
+  for r in $(all_repos); do
+    is_reference_repo "$r" || printf '%s\n' "$r"
   done
 }
 
@@ -98,7 +122,10 @@ parse_repos() {
     want="${want//[[:space:]]/}"
     [ -n "$want" ] || continue
     if ! resolved="$(resolve_repo "$want")"; then
-      die "unknown repo '$want'. Available: $(all_repos | paste -sd, -)"
+      die "unknown repo '$want'. Available: $(workable_repos | paste -sd, -)"
+    fi
+    if is_reference_repo "$resolved"; then
+      die "'$resolved' is reference-only (REFERENCE_REPOS in .env) - it is there to be read, not worked on. Drop it from REFERENCE_REPOS if that has changed."
     fi
     case " $out " in *" $resolved "*) continue;; esac
     out="$out $resolved"
@@ -184,9 +211,9 @@ cmd_new() {
   if [ -n "$repos_csv" ]; then
     repos="$(parse_repos "$repos_csv")"
   else
-    repos="$(all_repos)"
+    repos="$(workable_repos)"
   fi
-  [ -n "$repos" ] || die "no repos found under $REPOS_DIR"
+  [ -n "$repos" ] || die "no workable repos found under $REPOS_DIR"
 
   local space="$SPACES_DIR/$task"
   step "space ${C_BOLD}$task${C_RESET}  branch ${C_BOLD}$branch${C_RESET}"
@@ -275,7 +302,7 @@ cmd_new() {
 # The roster, read from disk. Docs point at this instead of naming services,
 # so cloning another checkout into repos/ never needs a doc edit.
 cmd_repos() {
-  local repo dir url open n=0
+  local repo dir url open note n=0 refs=0
   [ -d "$REPOS_DIR" ] || { info "no repos yet"; return 0; }
   step "repos"
   for repo in $(all_repos); do
@@ -288,14 +315,26 @@ cmd_repos() {
       [ -e "$d/.git" ] || continue
       open="$open $(basename "$(dirname "$d")")"
     done
+    if is_reference_repo "$repo"; then
+      note="${C_YELLOW}reference-only${C_RESET}"
+      refs=$((refs + 1))
+    else
+      note="${open:+open:${open// /, }}"
+    fi
     printf '  %-10s %-16s %-34s %s\n' \
-      "$repo" "repos/$repo" "$url" "${open:+open:${open// /, }}"
+      "$repo" "repos/$repo" "$url" "$note"
     n=$((n + 1))
   done
   info ""
   info "$n checkout(s). The directory name is the alias; a longer service name"
   info "resolves by prefix, so 'sport-service' finds 'sport'."
   info "Add one by cloning into repos/ - nothing else needs changing."
+  if [ "$refs" -gt 0 ]; then
+    info ""
+    info "$refs reference-only (REFERENCE_REPOS in .env): read them, ask about"
+    info "them, never edit them. They get no worktree and the guard refuses"
+    info "writes to them everywhere."
+  fi
 }
 
 # ---------------------------------------------------------------- config --
@@ -308,8 +347,13 @@ cmd_config() {
     "(from $(cfg_source SPACE_BRANCH_PREFIX))"
   printf '  %-22s %-18s %s\n' "SPACE_DEFAULT_BASE" "$DEFAULT_BASE" \
     "(from $(cfg_source SPACE_DEFAULT_BASE))"
+  printf '  %-22s %-18s %s\n' "REFERENCE_REPOS" "${REFERENCE_REPOS:--}" \
+    "(from $(cfg_source REFERENCE_REPOS))"
   info ""
   info "  a new space would branch:  ${C_BOLD}$BRANCH_PREFIX/<task>${C_RESET}"
+  if [ -n "$REFERENCE_REPOS" ]; then
+    info "  read-only everywhere:      ${C_BOLD}${REFERENCE_REPOS}${C_RESET}"
+  fi
   info ""
   if [ -f "$(cfg_file)" ]; then
     dim "$(cfg_file) exists (gitignored)"
@@ -449,7 +493,7 @@ cmd_rm() {
   [ -d "$space" ] || die "no such space: $space"
 
   local repos
-  if [ -n "$repos_csv" ]; then repos="$(parse_repos "$repos_csv")"; else repos="$(all_repos)"; fi
+  if [ -n "$repos_csv" ]; then repos="$(parse_repos "$repos_csv")"; else repos="$(workable_repos)"; fi
 
   step "removing space ${C_BOLD}$task${C_RESET}"
   local repo dir wt branch rm_args failed=0

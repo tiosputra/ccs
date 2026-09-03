@@ -21,6 +21,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 GUARD="$SCRIPT_DIR/guard.sh"
 
+# The reference-repo cases need a known list, and the machine .env must not
+# decide the outcome. The environment wins over .env, so pin it here: `mobile`
+# and `partner` are reference-only for the duration of this run, `backend`,
+# `sport` and `player` are not.
+export REFERENCE_REPOS=mobile,partner
+
 QUIET=0
 [ "${1:-}" = "-q" ] && QUIET=1
 
@@ -144,6 +150,34 @@ sh_case allow 'git -C spaces/some-task/backend push'
 sh_case allow 'cd spaces/some-task/backend && git add -A && git commit -m x'
 sh_case allow 'echo hi > spaces/some-task/backend/f.txt'
 sh_case allow 'npm test -- --maxWorkers=2 2>/dev/null'
+
+# --- reference repos are read-only in a space too --------------------------
+# repos/ already seals every checkout; these pin the part that is new - a
+# reference repo stays sealed inside spaces/, where every other repo is
+# writable. See REFERENCE_REPOS in .env.example.
+wr_case block spaces/some-task/mobile/src/App.tsx
+wr_case block spaces/some-task/partner/main.go
+wr_case block "$ROOT/spaces/some-task/mobile/src/App.tsx"
+wr_case block spaces/some-task/mobile
+wr_case allow spaces/some-task/mobile-app/src/App.tsx
+wr_case allow spaces/mobile/backend/src/x.ts
+wr_case allow spaces/some-task/backend/src/mobile/x.ts
+sh_case block 'echo hi > spaces/some-task/mobile/f.txt'
+sh_case block 'rm -rf spaces/some-task/partner/src'
+sh_case block 'sed -i "" s/a/b/ spaces/some-task/mobile/src/App.tsx'
+sh_case block 'git -C spaces/some-task/mobile commit -m x'
+sh_case block 'git -C spaces/some-task/mobile add -A'
+sh_case block 'cd spaces/some-task/mobile && git commit -m x'
+sh_case block 'cd spaces/some-task/mobile && rm -rf src'
+sh_case block 'cd spaces/some-task/mobile && echo hi > f.txt'
+sh_case allow 'git -C spaces/some-task/mobile log --oneline -5'
+sh_case allow 'git -C spaces/some-task/mobile status'
+sh_case allow 'cat spaces/some-task/mobile/package.json'
+sh_case allow 'grep -rn useEffect spaces/some-task/mobile/src'
+sh_case allow 'cd spaces/some-task/mobile && ls 2>/dev/null'
+sh_case allow 'cd spaces/some-task/mobile && npm ls > /tmp/out.txt'
+sh_case allow 'git -C spaces/some-task/mobile-app commit -m x'
+sh_case allow 'echo "spaces/t/backend -> spaces/t/mobile"'
 
 # --- a malformed payload must never brick the session ----------------------
 for bad in 'not json at all' '{}' '{"tool_name":"Bash"}' '{"tool_name":"Write","tool_input":{}}'; do

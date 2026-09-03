@@ -196,6 +196,16 @@ one. Finish a task under the prefix it started with.
 is not a matter of judgment. Everything else in `.claude/` is advice a session
 can talk itself out of.
 
+It enforces a second rule too. `REFERENCE_REPOS` in `.env` is a comma list of
+aliases that are read-only *everywhere* — `repos/<repo>/…` as always, and also
+`spaces/<task>/<repo>/…`, which is the part `repos/` protection alone misses.
+The guard resolves that setting through `config.sh`, the same three-layer
+precedence as every other one, so the environment can pin it for a test run and
+an unreadable `.env` degrades to sealing `repos/` alone rather than to sealing
+nothing. `space.sh` reads it as well: a reference repo gets no worktree, so in
+practice the space path never exists. The guard covers it anyway, because one
+made by hand before the setting existed would otherwise be a hole.
+
 It reads command text rather than a parsed shell, so its precision is a design
 choice rather than a guarantee. It aims to be exact in both directions: a write
 that slips through is the obvious failure, but a read wrongly refused is a tax
@@ -222,7 +232,14 @@ What passes:
   describes the roster rather than living inside a checkout, so it is writable
   from a session. `repos/` itself, every `repos/<repo>/…` path, and a lookalike
   such as `repos/README.md.bak` stay sealed.
-- `git add`/`commit`/`push` are expected inside a space and blocked in `repos/`.
+- `git add`/`commit`/`push` are expected inside a space and blocked in `repos/`
+  — and blocked in the space too when the repo is reference-only.
+- **A reference alias is matched as a whole path segment.** With
+  `REFERENCE_REPOS=mobile`, `spaces/t/mobile-app/…` is writable and so is
+  `spaces/t/backend/src/mobile/…`; only `spaces/t/mobile` and what is under it
+  is sealed. A task literally named `mobile` — `spaces/mobile/backend/…` — is
+  unaffected, because the alias is matched in the repo position, not the task
+  position.
 
 Residual cases, still worked around rather than weakened — an over-eager guard
 is the right failure direction:

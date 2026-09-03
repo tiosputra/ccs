@@ -26,6 +26,30 @@ If a task has no space yet, create one with `/space add <task>` before editing
 anything. If you find yourself about to write a path that starts with `repos/`,
 stop and rewrite it as `spaces/<task>/...`.
 
+## Reference-only repos
+
+Some checkouts are here to be **read**, not worked on — a mobile client you
+need to understand a payload from, a partner service whose contract you are
+matching. For those, the escape hatch above does not apply: rewriting the path
+as `spaces/<task>/...` does not make the edit allowed, because a reference repo
+is read-only *everywhere*.
+
+Which ones is per machine, so no tracked file names them. They are
+`REFERENCE_REPOS` in the gitignored `.env` — a comma list of repo aliases:
+
+```
+REFERENCE_REPOS=mobile,partner
+```
+
+Run `/space config` to see what this machine resolves to, or `/space repos`,
+which marks them in the roster. The guard hook reads the same setting and
+refuses writes to `repos/<repo>/…` and `spaces/<task>/<repo>/…` alike; `/space
+add` gives them no worktree, and refuses outright if you name one.
+
+Reading, searching, `git log`, `git diff`, answering questions about them —
+all fine, and the point. If a change genuinely belongs in one, say so and stop:
+taking a repo out of `REFERENCE_REPOS` is the user's call, never yours.
+
 ## One word for the unit of work: task
 
 "Task", "space", "product", "feature", "story", "bugfix", "hotfix" all refer to

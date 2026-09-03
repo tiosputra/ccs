@@ -42,10 +42,17 @@ a longer service name resolves by prefix, so `sport-service` finds `sport`.
 `/space repos` prints the current roster. Cloning a new service into `repos/`
 makes it available immediately — do not add it to any doc.
 
-**Omitting the repo list means every checkout in `repos/`**, however many that
-is today. That is rarely what a task wants. If the user did not say which
-services the work touches, ask, or infer it from the PRD — do not let the
+**Omitting the repo list means every workable checkout in `repos/`**, however
+many that is today. That is rarely what a task wants. If the user did not say
+which services the work touches, ask, or infer it from the PRD — do not let the
 default decide, and say in your report exactly which repos were created.
+
+**Reference-only repos get no worktree.** `REFERENCE_REPOS` in `.env` lists
+aliases that exist to be read, never worked on; they are skipped in the default
+set, and naming one explicitly fails with an error rather than a warning. That
+is correct, not a bug to route around — do not retry under a different name or
+suggest editing `.env`. Say which repo is reference-only and let the user
+decide.
 
 ```
 /space add fix-promo backend,player --from origin/feature/m5.1
@@ -79,6 +86,8 @@ Per this project's CLAUDE.md: never write anything under `repos/` - those
 checkouts are read-only origins, and the guard hook blocks it. All editing, and
 all committing, happens in `spaces/<task>/<repo>/`. Committing itself is `/pr`'s
 job at the end of a task, not something to do while a space is being worked.
+The exception is a repo listed in `REFERENCE_REPOS`: that one is read-only in a
+space too, and the guard blocks writes there as well.
 
 ### mode: add — worktrees are already created
 
@@ -117,7 +126,9 @@ machine. If the user wants to change it, they edit `.env` (`cp .env.example
 
 Relay the roster: which services are checked out, their remotes, and which
 open spaces are using them. This is the answer to "what can I work on" and to
-"what would a bare `/space add` create".
+"what would a bare `/space add` create". Any checkout marked `reference-only`
+is neither: it is there to be read and asked about, and no space will ever open
+a worktree for it.
 
 If a service the user expects is missing, the fix is to clone it into `repos/`
 — which is theirs to do, since the guard blocks writes there. Never propose

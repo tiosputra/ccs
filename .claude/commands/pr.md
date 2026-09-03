@@ -146,6 +146,10 @@ independent changes — do not split a single milestone into artificial commits.
 Per this project's `CLAUDE.md`, do not add `Co-Authored-By` or generated-with trailers
 unless the user asks for them.
 
+The `Task:` and `Plan:` trailers stay here, on the commit, and travel no further — see
+Phase 5. Anything the session's attribution rules append to a commit message
+(`Co-Authored-By`, `Claude-Session`) is likewise a commit trailer only.
+
 If `git commit` fails a pre-commit hook, report the hook's output and stop. Do not retry
 with `--no-verify`.
 
@@ -171,6 +175,36 @@ else's conflict silently is how work gets lost.
 ---
 
 ## Phase 5 — CREATE
+
+### The body is not the commit message
+
+A commit message and a PR body are written for different readers, and the trailers
+belong to exactly one of them. **Nothing below ever appears in a PR body:**
+
+```
+Task: <task>                        <- commit trailer
+Plan: docs/<date>_<task>/plan.md    <- commit trailer
+Co-Authored-By: ...                 <- commit trailer, if any
+Claude-Session: https://...         <- commit trailer, if any
+🤖 Generated with ...               <- never, in either
+```
+
+Those lines are bookkeeping for the workspace, and half of them point at paths no
+reviewer can open — `docs/<date>_<task>/` is workspace-local and is not in the repo.
+A PR body ends with its last real section; it gets no trailer block and no footer.
+
+Build the body from the sections below and from the planning artifacts. Never build
+it by pasting or extending the commit message, and never reach for `gh pr create
+--fill`, which turns the commit message *into* the body and drags every trailer with
+it. Before running `gh pr create`, re-read the body you assembled and delete any line
+matching the list above.
+
+This bans trailers, not cross-references. The **Related** section is where a body
+points outward, and links to the **sibling PRs in the same task are wanted** — they
+are the only way a reviewer sees that a change spans several repos, and they resolve
+on GitHub, which is what separates them from the lines above. Task docs get a mention
+there too, in prose, marked workspace-local, so a reviewer knows that path is not
+theirs to open.
 
 ### With a template
 

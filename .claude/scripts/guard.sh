@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
 #
-# guard.sh - PreToolUse hook. Enforces the one workspace rule that CLAUDE.md
+# guard.sh - PreToolUse hook. Enforces the two workspace rules that CLAUDE.md
 # can only ask for:
 #
-#   repos/ is read-only. Never write there, and never run a git command that
-#   moves those checkouts. All work happens in spaces/<task>/<repo>/, where
-#   git add / commit / push are allowed and expected - /pr uses them.
+#   1. repos/ is read-only. Never write there, and never run a git command
+#      that moves those checkouts. All work happens in spaces/<task>/<repo>/,
+#      where git add / commit / push are allowed and expected - /pr uses them.
+#
+#   2. Reference repos are read-only *everywhere*. REFERENCE_REPOS in .env is
+#      a comma list of repo aliases kept for reading, questions and analysis
+#      only - REFERENCE_REPOS=mobile,partner seals repos/mobile and
+#      repos/partner as before, and also seals spaces/<task>/mobile and
+#      spaces/<task>/partner, which the rest of the workspace never opens.
 #
 # `repos/README.md` is the one exception: it is tracked in this repo (the
 # gitignore un-ignores it) and describes the roster rather than living inside
@@ -15,7 +21,9 @@
 # blocks it and shows stderr to the agent so it can correct course.
 #
 # Anything unexpected (bad JSON, missing fields, no python3) exits 0. A guard
-# that bricks the session on a malformed payload is worse than no guard.
+# that bricks the session on a malformed payload is worse than no guard. The
+# same goes for REFERENCE_REPOS: an unreadable .env leaves the list empty and
+# the guard falls back to sealing repos/ alone.
 #
 # Test it by hand:
 #   echo '{"tool_name":"Write","tool_input":{"file_path":"repos/backend/x.ts"}}' \
@@ -23,14 +31,19 @@
 #
 # The matching aims to be precise in both directions: a read dressed up as a
 # write is a session-wide tax, and every relaxation below is a case where the
-# command provably cannot write into a checkout. See `ccs-conventions` for the
-# residual cases.
+# command provably cannot write into a sealed checkout. See `ccs-conventions`
+# for the residual cases.
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 command -v python3 >/dev/null 2>&1 || exit 0
 
-ROOT="$ROOT" exec python3 -c '
+# Same precedence as every other setting: environment, then .env, then empty.
+. "$SCRIPT_DIR/config.sh" 2>/dev/null
+cfg_resolve REFERENCE_REPOS "" 2>/dev/null || REFERENCE_REPOS=""
+
+ROOT="$ROOT" REFERENCE_REPOS="${REFERENCE_REPOS:-}" exec python3 -c '
 import json, os, re, sys
 
 def allow():  sys.exit(0)
@@ -45,24 +58,43 @@ except Exception:
 
 ROOT   = os.path.realpath(os.environ["ROOT"])
 REPOS  = os.path.join(ROOT, "repos")
+SPACES = os.path.join(ROOT, "spaces")
 ROSTER = os.path.join(REPOS, "README.md")
 tool   = payload.get("tool_name", "")
 inp    = payload.get("tool_input") or {}
 cwd    = payload.get("cwd") or os.getcwd()
 
-def sealed(path):
-    """True if path is a repos/ location the workspace seals off.
+# Reference-only repos: read them, never write them - not in repos/, and not
+# in a space either, which is the part repos/ protection alone misses.
+REFS = [r.strip() for r in os.environ.get("REFERENCE_REPOS", "").split(",")
+        if r.strip()]
+
+def seal_reason(path):
+    """Why this path is sealed, or None if it is writable.
+
+    "repos"     - repos/ is the canonical read-only checkout of everything.
+    "reference" - a REFERENCE_REPOS worktree inside a space.
 
     repos/README.md is tracked here and belongs to the workspace, not to a
     checkout, so it stays writable. repos/ itself and everything below it
     does not."""
     if not path:
-        return False
+        return None
     p = path if os.path.isabs(path) else os.path.join(cwd, path)
     p = os.path.realpath(p)
     if p == os.path.realpath(ROSTER):
-        return False
-    return p == REPOS or p.startswith(REPOS + os.sep)
+        return None
+    if p == REPOS or p.startswith(REPOS + os.sep):
+        return "repos"
+    if REFS and p.startswith(SPACES + os.sep):
+        # spaces/<task>/<repo>/... - the repo is the second segment.
+        parts = p[len(SPACES) + 1:].split(os.sep)
+        if len(parts) >= 2 and parts[1] in REFS:
+            return "reference"
+    return None
+
+def sealed(path):
+    return seal_reason(path) is not None
 
 WRITE_HINT = (
     "repos/ is read-only in this workspace (see CLAUDE.md).\n"
@@ -72,14 +104,27 @@ WRITE_HINT = (
     "run: .claude/scripts/space.sh add <task> <repos> --from <source-branch>"
 )
 
+REF_HINT = (
+    "That path is inside a reference-only repo (REFERENCE_REPOS in .env: "
+    + ", ".join(REFS) + ").\n"
+    "Those repos exist to be read, searched and asked about - never edited,\n"
+    "committed, or written to by a generator, in repos/ or in a space.\n"
+    "If the change really belongs there, the user has to drop the repo from\n"
+    "REFERENCE_REPOS first; that is their call, not yours."
+)
+
+def hint(reason):
+    return REF_HINT if reason == "reference" else WRITE_HINT
+
 # ---- file-writing tools -------------------------------------------------
 if tool in ("Write", "Edit", "NotebookEdit", "MultiEdit"):
-    for key in ("file_path", "notebook_path", "path"):
-        if sealed(inp.get(key)):
-            block("BLOCKED: refusing to write " + str(inp[key]) + "\n\n" + WRITE_HINT)
-    for e in inp.get("edits") or []:
-        if isinstance(e, dict) and sealed(e.get("file_path")):
-            block("BLOCKED: refusing to write " + str(e["file_path"]) + "\n\n" + WRITE_HINT)
+    paths = [inp.get(k) for k in ("file_path", "notebook_path", "path")]
+    paths += [e.get("file_path") for e in (inp.get("edits") or [])
+              if isinstance(e, dict)]
+    for path in paths:
+        reason = seal_reason(path)
+        if reason:
+            block("BLOCKED: refusing to write " + str(path) + "\n\n" + hint(reason))
     allow()
 
 if tool != "Bash":
@@ -92,13 +137,32 @@ cmd = inp.get("command") or ""
 # tripping the guard.
 CMDPOS = r"(?:^|[\n;&|(]|&&|\|\|)\s*"
 
-# git add / commit / push are allowed - inside a space. Only repos/ is sealed.
-# ---- repos/ protection, shell edition -----------------------------------
-# Any sealed repos/ path written as a bare relative path, or as an absolute
-# path. repos/README.md is carved out so the roster stays editable; a lookalike
+# git add / commit / push are allowed - inside a space, for a repo that is not
+# reference-only. Only the sealed paths below are refused.
+# ---- sealed paths, shell edition ----------------------------------------
+# Any sealed path written as a bare relative path, or as an absolute path.
+# repos/README.md is carved out so the roster stays editable; a lookalike
 # such as repos/README.md.bak is not.
 REPOS_PATH = (r"(?:" + re.escape(REPOS) + r"|(?<![\w./-])repos)"
               r"/(?!README\.md(?![\w./-]))\S+")
+
+# spaces/<task>/<reference-repo> and anything under it. `(?![\w.-])` keeps a
+# space worktree named mobile-app out of it when the reference repo is mobile.
+if REFS:
+    SPACE_REF_PATH = (r"(?:" + re.escape(SPACES) + r"|(?<![\w./-])spaces)"
+                      r"/[^/\s]+/(?:" + "|".join(re.escape(r) for r in REFS)
+                      + r")(?![\w.-])\S*")
+    SEALED_PATH = r"(?:" + REPOS_PATH + r"|" + SPACE_REF_PATH + r")"
+else:
+    SEALED_PATH = REPOS_PATH
+
+def hint_for_text(text):
+    """Which rule a matched path text fell under. Text, not resolved path:
+    the regex checks match on how the command was written."""
+    t = text.strip("\"\x27")
+    if re.match(r"(?:" + re.escape(SPACES) + r"|spaces)/", t):
+        return REF_HINT
+    return WRITE_HINT
 
 # ---- git subcommands ----------------------------------------------------
 # Verbs that move a checkout no matter how they are invoked.
@@ -134,45 +198,55 @@ def git_call_mutates(sub, rest):
     return not READ_ONLY_FIRST.match(rest)
 
 GIT_C = re.compile(CMDPOS + r"(?:sudo\s+)?git\s+(?:-\S+\s+)*-C\s+(?:\"|\x27)?"
-                   + REPOS_PATH + r"(?:\"|\x27)?\s+(?:-\S+\s+)*(\S+)([^\n;&|]*)")
+                   + r"(?P<path>" + SEALED_PATH + r")"
+                   + r"(?:\"|\x27)?\s+(?:-\S+\s+)*(?P<sub>\S+)(?P<rest>[^\n;&|]*)")
 GIT_PLAIN = re.compile(CMDPOS + r"(?:sudo\s+)?git\s+(?:-\S+\s+)*(\S+)([^\n;&|]*)")
 
 for m in GIT_C.finditer(cmd):
-    if git_call_mutates(m.group(1), m.group(2)):
-        block("BLOCKED: that git command would mutate a repos/ checkout.\n\n" + WRITE_HINT)
+    if git_call_mutates(m.group("sub"), m.group("rest")):
+        block("BLOCKED: that git command would mutate a sealed checkout: "
+              + m.group("path") + "\n\n" + hint_for_text(m.group("path")))
 
 # ---- redirections -------------------------------------------------------
 # A redirect operator is >, >>, N>, &>. It is never -> or =>, so an ASCII arrow
 # in prose - "spaces/x/backend -> repos/backend" - is not a redirect.
 REDIRECT = re.compile(r"(?<![-=])(?:\d+)?>>?\s*(?:\"|\x27)?(&\d+|&-|[^\s;&|<>()\"\x27]+)")
 
-def redirect_writes_into_repos(target, base):
-    """True if this redirect could land inside a sealed repos/ path."""
+def redirect_reason(target, base):
+    """Why this redirect is refused, or None if it lands somewhere writable."""
     if target.startswith("&"):
-        return False                       # fd duplication writes no file
+        return None                        # fd duplication writes no file
     if target.startswith("/dev/"):
-        return False                       # /dev/null, /dev/stderr, /dev/fd/N
+        return None                        # /dev/null, /dev/stderr, /dev/fd/N
     p = target if os.path.isabs(target) else os.path.join(base, target)
-    return sealed(p)
+    return seal_reason(p)
 
-if any(redirect_writes_into_repos(m.group(1), cwd) for m in REDIRECT.finditer(cmd)):
-    block("BLOCKED: that redirect would write into repos/.\n\n" + WRITE_HINT)
+for m in REDIRECT.finditer(cmd):
+    reason = redirect_reason(m.group(1), cwd)
+    if reason:
+        block("BLOCKED: that redirect would write into a sealed checkout: "
+              + m.group(1) + "\n\n" + hint(reason))
 
-# Destructive or in-place file commands naming a repos/ path.
+# Destructive or in-place file commands naming a sealed path.
 DESTRUCTIVE = r"rm|rmdir|mv|cp|touch|mkdir|tee|truncate|chmod|chown|ln|dd"
-if re.search(CMDPOS + r"(?:sudo\s+)?(?:" + DESTRUCTIVE + r")\b[^\n;&|]*"
-             + REPOS_PATH, cmd):
-    block("BLOCKED: that command would modify repos/.\n\n" + WRITE_HINT)
+m = re.search(CMDPOS + r"(?:sudo\s+)?(?:" + DESTRUCTIVE + r")\b[^\n;&|]*"
+              + r"(" + SEALED_PATH + r")", cmd)
+if m:
+    block("BLOCKED: that command would modify a sealed checkout: " + m.group(1)
+          + "\n\n" + hint_for_text(m.group(1)))
 
 # sed -i / perl -i rewrite files in place.
-if re.search(CMDPOS + r"(?:sudo\s+)?(?:sed|perl)\b[^\n;&|]*\s-\S*i\S*\b[^\n;&|]*"
-             + REPOS_PATH, cmd):
-    block("BLOCKED: that in-place edit targets repos/.\n\n" + WRITE_HINT)
+m = re.search(CMDPOS + r"(?:sudo\s+)?(?:sed|perl)\b[^\n;&|]*\s-\S*i\S*\b[^\n;&|]*"
+              + r"(" + SEALED_PATH + r")", cmd)
+if m:
+    block("BLOCKED: that in-place edit targets a sealed checkout: " + m.group(1)
+          + "\n\n" + hint_for_text(m.group(1)))
 
-# cd into repos/ and then do something that changes it. Reading after a cd -
-# `cd repos/backend && git log`, or `cd repos/backend && ls 2>/dev/null` -
-# stays fine: a redirect only counts if its target resolves inside repos/.
-into = re.search(CMDPOS + r"cd\s+(?:\"|\x27)?(" + REPOS_PATH + r")", cmd)
+# cd into a sealed checkout and then do something that changes it. Reading
+# after a cd - `cd repos/backend && git log`, or `cd repos/backend && ls
+# 2>/dev/null` - stays fine: a redirect only counts if its target resolves
+# inside a sealed checkout.
+into = re.search(CMDPOS + r"cd\s+(?:\"|\x27)?(" + SEALED_PATH + r")", cmd)
 if into:
     base = into.group(1).strip("\"\x27")
     base = base if os.path.isabs(base) else os.path.join(cwd, base)
@@ -180,10 +254,9 @@ if into:
                        for m in GIT_PLAIN.finditer(cmd))
     if mutating_git \
        or re.search(CMDPOS + r"(?:sudo\s+)?(?:" + DESTRUCTIVE + r")\b", cmd) \
-       or any(redirect_writes_into_repos(m.group(1), base)
-              for m in REDIRECT.finditer(cmd)):
-        block("BLOCKED: that would change a repos/ checkout after cd-ing into it.\n\n"
-              + WRITE_HINT)
+       or any(redirect_reason(m.group(1), base) for m in REDIRECT.finditer(cmd)):
+        block("BLOCKED: that would change a sealed checkout after cd-ing into it.\n\n"
+              + hint_for_text(into.group(1)))
 
 allow()
 '

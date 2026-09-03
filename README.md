@@ -46,7 +46,8 @@ swing/
 ```
 
 Nothing in `repos/` is ever worked in directly — treat those checkouts as
-read-only origins. All editing happens in `spaces/<task>/<repo>/`.
+read-only origins. All editing happens in `spaces/<task>/<repo>/`, except for
+the repos listed in `REFERENCE_REPOS`, which are read-only there too.
 
 ## Repos
 
@@ -67,9 +68,30 @@ A longer service name resolves by prefix, so `sport-service` finds `sport` and
 `payment-service` finds `payment`. Wherever a command takes a repo list, it
 takes those aliases, comma-separated.
 
-**Omitting the repo list means every checkout in `repos/`.** That is a growing
-number, so a bare `/space add <task>` creates a worktree for every service you
-have cloned. Name the repos the task actually needs.
+**Omitting the repo list means every workable checkout in `repos/`.** That is a
+growing number, so a bare `/space add <task>` creates a worktree for every
+service you have cloned. Name the repos the task actually needs.
+
+### Reference-only repos
+
+Not every checkout is one you work in. A mobile client, a partner service, a
+repo you cloned only to read its contracts — those are reference material, and
+an agent should never edit them, in `repos/` or in a space.
+
+List them in `.env`, comma-separated, by their alias:
+
+```
+REFERENCE_REPOS=mobile,partner
+```
+
+From then on `/space repos` marks them `reference-only`, `/space add <task>`
+skips them in the default set and refuses if you name one explicitly, and the
+guard hook blocks every write to `repos/<repo>/…` **and**
+`spaces/<task>/<repo>/…`. Reading, grepping and `git log` stay untouched — that
+is what the repo is there for.
+
+The list is per machine, like the branch prefix, so no tracked file names it.
+`/space config` prints what yours resolved to.
 
 ## The task flow
 
@@ -252,6 +274,8 @@ no space and no `/pr`; `ccs-conventions` describes how its pieces are shaped.
 
 - Never write anything under `repos/` — see `CLAUDE.md`. A `PreToolUse` hook
   (`.claude/scripts/guard.sh`) enforces it, so this is not a matter of judgment.
+- A repo listed in `REFERENCE_REPOS` is read-only in a space too, not just in
+  `repos/`. The same hook enforces that.
 - `git add`, `git commit`, and `git push` are fine **inside a space**. Committing
   happens once, at the end, through `/pr` — not as checkpoints during a build.
 - Tear a space down with `/space remove`, not `rm -rf`. A raw delete leaves
