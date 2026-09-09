@@ -16,7 +16,8 @@ Run inline by default. Do not call the Task tool or any subagent by default. Thi
 1. **Restate Requirements** - Clarify what needs to be built
 2. **Identify Risks** - Surface potential issues and blockers
 3. **Create Step Plan** - Break down implementation into phases
-4. **Wait for Confirmation** - MUST receive user approval before proceeding
+4. **Write the API Contract** - if the work changes anything a consumer can observe
+5. **Wait for Confirmation** - MUST receive user approval before proceeding
 
 ## When to Use
 
@@ -137,6 +138,190 @@ each relevant category with file references:
 
 If no similar code exists, state that explicitly. Do not invent a pattern.
 
+## API Contract
+
+Anything a consumer can observe changing at a boundary is written down separately, in
+`docs/<YYYY-MM-DD>_<task>/api-contract.md`. Frontend and mobile read that file - often
+through an LLM of their own - and build against it while the provider is still being
+written. It is the one task artifact with a reader outside this workspace, so it must
+stand on its own: assume no plan, no PRD, and no knowledge of spaces.
+
+**Write one when the milestone changes any of these:**
+
+| Change | Example |
+|---|---|
+| A new endpoint | `POST /v4/booking/hold` |
+| A new field on an existing response | `cancellationReason` appears on a booking |
+| A changed field | its type, nullability, enum values, or meaning |
+| A new socket event, or a new payload on an existing one | `booking` on the player namespace |
+| An error a consumer must handle differently | `409 SLOT_TAKEN` |
+
+**Skip it** when the milestone is invisible from outside the service - an internal
+refactor, a query rewrite, a migration with no response change. Say so in one line in the
+plan's Summary rather than writing an empty file; a contract nobody needed is noise the
+next reader has to rule out.
+
+Read the `contract-first` skill before writing it. The rules that bite most often here:
+design from what the consumer must render rather than from a database row, state
+nullability and enum values explicitly, and change the contract before the implementation
+rather than recording it afterwards.
+
+**One file per task, appended per milestone**, the same way `testing.md` is one file with a
+section per repo. Read it before writing, add or revise only your milestone's entries,
+never start a second file.
+
+### Where the truth lives after merge
+
+This file is authoritative for the boundary *during* the task, when the provider does not
+exist yet to be inspected. Each repo already generates a spec that takes over once the code
+lands, and every entry names the one it will end up in:
+
+| Repo | Generated spec | Note |
+|---|---|---|
+| `backend` | `src/openapi/spec/` - split JSON under `paths/` and `components/schemas/`, served at `/docs` | HTTP only |
+| `sport`, `player` | `docs/swagger.yaml` - generated from handler annotations | HTTP only |
+| any socket.io event | none | `src/services/io/<domain>/` generates nothing, so this file stays the only written contract |
+
+Socket events are the case that most needs writing down, precisely because nothing
+generates them.
+
+### Template
+
+Use only the entry kinds the milestone actually contains. Dates come from `date +%F`.
+
+````markdown
+# API Contract: {Task Name}
+
+*Task `<task>` · created {YYYY-MM-DD} · last updated {YYYY-MM-DD}*
+**Provider**: {repo} · **Consumers**: {web, mobile, admin} · **Plan**: `plan.md`
+
+> The agreed shape of every boundary this task changes, written before the provider
+> exists so consumers can build against it. If the implementation needs a different
+> shape, this file changes first and the change is reviewed - not the other way round.
+
+## Changes
+
+| # | Kind | Boundary | Change | Breaking |
+|---|---|---|---|---|
+| 1 | endpoint | `POST /v4/booking/hold` | new | no |
+| 2 | field | `GET /v4/booking/{id}` -> `data.cancellationReason` | added | no |
+| 3 | socket | player ns, event `booking_held` | new | no |
+
+**Breaking** means an existing consumer stops working without a change on its side: a
+removed or renamed field, a narrowed type, a newly required request field, or a new enum
+value the consumer must handle. An added optional field is not breaking.
+
+---
+
+### 1. NEW ENDPOINT - `POST /v4/booking/hold`
+
+**Milestone** 1 · **Provider** `backend` · **Lands in** `src/openapi/spec/paths/v4/...`
+**Auth**: bearer player token. `401` when absent, `403` when the token does not own the booking.
+**Called when**: the player taps Checkout, once per attempt.
+
+Request
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `venueSportId` | string | yes | Opaque. Never parse as a number. |
+| `startTime` | string | yes | `HH:mm`, venue local time, 24-hour. Not UTC. |
+
+Response `200`
+
+| Field | Type | Null? | Notes |
+|---|---|---|---|
+| `data.holdId` | string | no | Opaque; pass back to confirm. |
+| `data.expiresAt` | string | no | ISO 8601 with offset. Count down from this, never from a local duration. |
+| `data.priceBreakdown[]` | array | no | Empty array when nothing applies - never null. |
+
+```json
+{ "data": { "holdId": "h_01J...", "expiresAt": "2026-09-09T14:05:00+07:00", "priceBreakdown": [] } }
+```
+
+Errors the consumer branches on
+
+| Status | `code` | Means | Consumer does |
+|---|---|---|---|
+| 409 | `SLOT_TAKEN` | another player holds it | re-fetch the slot list, show it taken |
+| 422 | `VENUE_CLOSED` | outside opening hours | show the venue's hours |
+
+Anything else is a generic error; do not branch on it.
+
+---
+
+### 2. NEW FIELD - `data.cancellationReason` on `GET /v4/booking/{id}`
+
+**Milestone** 1 · **Provider** `backend` · **Breaking** no (additive, optional)
+
+| Field | Type | Null? | Notes |
+|---|---|---|---|
+| `data.cancellationReason` | string \| null | yes | Null for every status except `cancelled`. Free text - render it, do not switch on it. |
+
+**Every provider path that must return it.** A field added to one path and not another is
+the regression this file exists to prevent, so list them and tick them off:
+
+- [ ] the handler itself
+- [ ] the `SELECT` / query projection behind it
+- [ ] sandbox, mock, or seeded responses
+- [ ] every other endpoint returning the same object (a list as well as a detail route)
+- [ ] any socket payload carrying that object
+
+Until all of them ship, a consumer must treat a missing key and an explicit `null` alike.
+
+---
+
+### 3. NEW SOCKET EVENT - `booking_held`
+
+**Milestone** 1 · **Provider** `backend`, `src/services/io/booking/` · **Generated spec** none
+
+| Aspect | Value |
+|---|---|
+| Namespace | player realtime |
+| Room | the booking id |
+| How the client joins | `handshake.query.bookingId`, a UUID the server validates and rejects if unknown |
+| Direction | server -> client |
+| Trigger | a hold created by `POST /v4/booking/hold` |
+| Envelope | `{ "data": ... }` - every event on this namespace wraps its payload under `data` |
+
+Payload (`data`)
+
+| Field | Type | Null? | Notes |
+|---|---|---|---|
+| `holdId` | string | no | Same value the HTTP response returned. |
+| `expiresAt` | string | no | ISO 8601 with offset. |
+
+Delivery semantics - answer each one; a consumer cannot guess them and will guess wrong:
+
+| Question | Answer |
+|---|---|
+| Is ordering guaranteed against other events in this room? | |
+| Can it arrive more than once? | |
+| Is it replayed on reconnect, or only live? | |
+| Can it arrive before the HTTP response that caused it? | |
+| What should the consumer do if it never arrives? | |
+
+The last two are where realtime consumers actually break: one that treats the event as its
+only source of truth hangs forever when it is missed, and one that assumes the event lands
+after its own HTTP response races it.
+
+---
+
+## Consumer checklist
+
+- [ ] Every identifier is treated as an opaque string.
+- [ ] Every nullable field has a rendered empty state.
+- [ ] Every enum has a fallback branch for a value added later.
+- [ ] Every listed error `code` has its own consumer behavior.
+- [ ] No consumer reads a field this file does not define.
+
+## Open questions
+
+- [ ] {question} - settled by {who or what}
+````
+
+An entry that cannot answer a row leaves it blank and adds the question to **Open
+Questions**. A guessed answer is worse than an empty cell: the consumer builds on it.
+
 ## PRD Artifact Output
 
 When called with a PRD file (`docs/<YYYY-MM-DD>_<task>/prd.md`), write the plan beside it —
@@ -202,11 +387,13 @@ cd spaces/<task>/<repo> && {project-specific validation command}
 - [ ] Validation passes in every repo the plan touches
 - [ ] Patterns mirrored, not reinvented
 - [ ] No file outside `spaces/<task>/` was written
+- [ ] Every boundary change is in `api-contract.md`, or the Summary says why there is none
 
 ## Handoff
 <!-- What a space-blind skill or agent needs, and nothing more. -->
 
 **Evidence report**: `docs/<YYYY-MM-DD>_<task>/testing.md`
+**API contract**: `docs/<YYYY-MM-DD>_<task>/api-contract.md` — or `none, no boundary change`
 
 | Consumer | Working directory | Base ref |
 |---|---|---|
@@ -220,6 +407,11 @@ would scatter the evidence across the service repos and put it in their PRs. Han
 path explicitly, every time, for every repo: each run adds its own `## <repo>` section to
 the same file.
 
+The API contract is handed down the same way and for the same reason. `tdd-workflow` uses
+it as the shape the provider's tests must prove, so a boundary change that is not in the
+file is a change nothing verifies. Name the path, or say explicitly that this milestone
+changes no boundary — silence reads as an omission.
+
 After writing the artifact, report its path and WAIT for confirmation before writing code.
 
 Report the handoff explicitly:
@@ -230,11 +422,15 @@ Space: spaces/<task>/  (backend, sport)  branch <prefix>/<task>
 
 Milestone: {N} — {milestone name}
 Plan written: docs/<date>_<task>/plan.md          (plan-m{N}.md for a later milestone)
+API contract: docs/<date>_<task>/api-contract.md  ({n} changes: {n} endpoints, {n} fields,
+                                                   {n} socket events, {n} breaking)
+              (or: none — this milestone changes no boundary)
 PRD updated: milestone {N} -> in-progress
 
 Next step (after you confirm): tdd-workflow skill with docs/<date>_<task>/plan.md
   -> pass it the working directory: spaces/<task>/<repo>/
-     and the evidence report path: docs/<date>_<task>/testing.md
+     the evidence report path: docs/<date>_<task>/testing.md
+     and the API contract path: docs/<date>_<task>/api-contract.md
      The skill takes the plan's tasks and Validate commands as intent, then proves
      each one through its own RED/GREEN gate. It knows the directory, not the space.
 ```
@@ -320,6 +516,7 @@ The workspace chain is:
 /space add <task> --from <ref>   ->  spaces/<task>/<repo>/
 /plan-prd                        ->  docs/<date>_<task>/prd.md
 /plan                            ->  docs/<date>_<task>/plan.md   (plan-m2.md, ... per milestone)
+                                 ->  docs/<date>_<task>/api-contract.md   (when a boundary changes)
 tdd-workflow skill               ->  implementation, evidence in docs/<date>_<task>/testing.md
 /space remove <task>             ->  docs/<date>_<task>/log.md, then teardown
 ```
@@ -333,5 +530,8 @@ reconstructing it.
   (`.claude/skills/tdd-workflow/SKILL.md`) with the plan path as its argument. The skill
   treats the plan as untrusted input: it converts each task into a failing test first, and
   never takes the plan's Validate commands as permission to skip the RED gate.
+- **Changing an API, a payload, or a socket event?** The `contract-first` skill governs how
+  a boundary moves; `api-contract.md` is where this workspace writes the result down. Both
+  are for the shape consumers see — `api-design` is for whether that shape is any good.
 - **No space yet?** `/space add <task> [repos] --from <ref>` creates it. `/space list` shows
   what is open; `/space remove <task>` writes the wrap-up log and tears it down.

@@ -29,6 +29,7 @@ swing/
 │   └── 2026-08-28_add-label/
 │       ├── prd.md              requirements, confirmed at Gate 1
 │       ├── plan.md             milestone 1 (plan-m2.md, plan-m3.md follow)
+│       ├── api-contract.md     what consumers see change - read by frontend/mobile
 │       ├── testing.md          RED/GREEN evidence, one section per repo
 │       └── log.md              wrap-up, written just before teardown
 │

@@ -29,6 +29,7 @@ reused everywhere, so a task is one word across the whole workspace:
 | Task docs | `docs/<YYYY-MM-DD>_<task>/` — one directory for everything written |
 | PRD | `docs/<YYYY-MM-DD>_<task>/prd.md` |
 | Plan | `docs/<YYYY-MM-DD>_<task>/plan.md`, then `plan-m2.md` per later milestone |
+| API contract | `docs/<YYYY-MM-DD>_<task>/api-contract.md` — what consumers see change |
 | TDD evidence | `docs/<YYYY-MM-DD>_<task>/testing.md` — one section per repo |
 | Wrap-up log | `docs/<YYYY-MM-DD>_<task>/log.md` |
 

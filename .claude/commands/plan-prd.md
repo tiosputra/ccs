@@ -152,7 +152,7 @@ mkdir -p docs/<YYYY-MM-DD>_<task>
 **Output path**: `docs/<YYYY-MM-DD>_<task>/prd.md`, where the date is today's `date +%F`
 and `<task>` is the kebab-case task name — e.g.
 `docs/2026-08-28_offline-sync/prd.md`. This directory is where every later artifact of the
-task goes too: `plan.md`, `testing.md`, `log.md`. Creating it is the one write this phase
+task goes too: `plan.md`, `api-contract.md`, `testing.md`, `log.md`. Creating it is the one write this phase
 makes; no space, no branch, no code.
 
 The date in the directory name is the day the task **opened** and never changes afterwards.
@@ -293,9 +293,17 @@ Now run straight through. No further permission prompts; Gate 1 covered all of t
    that, with working directories and base commits filled in. Flip that milestone's row to
    `in-progress`.
 
+   If the milestone changes anything a consumer can observe — a new endpoint, a new or
+   changed response field, a new socket event, a new error to branch on — `/plan` also
+   writes `api-contract.md` in that directory, per its **API Contract** section. That file
+   is read by the frontend and mobile teams, so it is written now, while the provider is
+   still hypothetical, rather than reverse-engineered from the finished handler. One file
+   per task: a later milestone appends its entries to the same one.
+
 3. **Implement it** with the `tdd-workflow` skill, once per repo the milestone touches.
-   Hand it three things: the plan path, the working directory `spaces/<task>/<repo>/`, and
-   the evidence report path `docs/<YYYY-MM-DD>_<task>/testing.md`. The skill is space-blind
+   Hand it four things: the plan path, the working directory `spaces/<task>/<repo>/`, the
+   evidence report path `docs/<YYYY-MM-DD>_<task>/testing.md`, and the API contract
+   `docs/<YYYY-MM-DD>_<task>/api-contract.md` when the milestone wrote one. The skill is space-blind
    — give it directories and paths, never a task name — and it writes its evidence wherever
    it is told, so passing that path is what keeps the whole task's evidence in one file
    instead of scattering a copy into each service repo. Every repo appends its own
@@ -323,6 +331,7 @@ Done: <task> — milestone {N}, {milestone name}
 
 Evidence:  docs/<date>_<task>/testing.md   ({n} repo sections)
 Plan:      docs/<date>_<task>/plan.md      (plan-m{N}.md for a later milestone)
+Contract:  docs/<date>_<task>/api-contract.md   ({n} changes, {n} breaking — or "none")
 Uncommitted in: spaces/<task>/<repo>/   (nothing committed yet)
 
 Review findings left open:
@@ -343,7 +352,7 @@ If milestones remain, offer the next one after the PR is open.
 /plan-prd <idea> from branch <ref>
       |         writes docs/<date>_<task>/prd.md   <- nothing else created yet
    [GATE 1]     you read it and confirm
-      |         space.sh add -> /plan -> tdd-workflow -> reviewer agents
+      |         space.sh add -> /plan (+ api-contract.md) -> tdd-workflow -> reviewer agents
    [GATE 2]     you confirm it is ready
       |
     /pr         stage, commit, push, open one PR per repo
@@ -365,7 +374,8 @@ If milestones remain, offer the next one after the PR is open.
 - **HYPOTHESIS_TESTABLE**: measurable outcome included.
 - **SCOPE_BOUNDED**: explicit MVP and explicit out-of-scope.
 - **QUESTIONS_ASKED_NOT_PARKED**: every uncertainty the user could answer was asked in the terminal before the PRD was written; Open Questions holds only what needs data, a spike, or a third party — each with the method that settles it.
-- **ONE_TASK_ONE_DIRECTORY**: every artifact of the task — PRD, plans, evidence, log — is written inside `docs/<YYYY-MM-DD>_<task>/`, and nothing of this task is written anywhere else.
+- **CONTRACT_BEFORE_IMPLEMENTATION**: a milestone that changes an endpoint, a response field, a socket event, or an error a consumer branches on has `api-contract.md` written before the implementation, not after — and a milestone that changes no boundary says so rather than leaving it ambiguous.
+- **ONE_TASK_ONE_DIRECTORY**: every artifact of the task — PRD, plans, API contract, evidence, log — is written inside `docs/<YYYY-MM-DD>_<task>/`, and nothing of this task is written anywhere else.
 - **PRD_DIRECTORY_DATED**: the directory is `docs/<YYYY-MM-DD>_<task>/` with the date from `date +%F`; an existing one is found by globbing `docs/*_<task>/`, never by guessing a date, and never re-dated.
 - **PRD_DATED**: the PRD carries *Created* and *Last updated* dates in `YYYY-MM-DD`, taken from `date +%F`, and *Last updated* is bumped on every later edit.
 - **NO_REPOS_PATHS**: no path under `repos/` appears anywhere in the PRD.

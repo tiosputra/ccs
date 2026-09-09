@@ -63,6 +63,7 @@ the same thing in this workspace. Everything under `.claude/` calls it a
 | Task docs | `docs/<YYYY-MM-DD>_<task>/` — everything written about the task |
 | PRD | `docs/<YYYY-MM-DD>_<task>/prd.md` |
 | Plan | `docs/<YYYY-MM-DD>_<task>/plan.md`, then `plan-m2.md`, `plan-m3.md` per later milestone |
+| API contract | `docs/<YYYY-MM-DD>_<task>/api-contract.md` — what consumers see change |
 | TDD evidence | `docs/<YYYY-MM-DD>_<task>/testing.md` — one section per repo |
 | Wrap-up log | `docs/<YYYY-MM-DD>_<task>/log.md` |
 | Pull request | one per repo in the space, branch `<prefix>/<task>` -> the source branch |

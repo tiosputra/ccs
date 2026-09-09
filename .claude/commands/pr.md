@@ -108,12 +108,19 @@ ls -d docs/*_<task>/          # the date prefix is the day the task opened
 - `docs/<date>_<task>/prd.md` — the problem, hypothesis, and milestone
 - `docs/<date>_<task>/plan.md` (or `plan-m<N>.md`) — what was actually built
 - `docs/<date>_<task>/testing.md` — the RED/GREEN evidence, one section per repo
+- `docs/<date>_<task>/api-contract.md` — what consumers see change, if the task changed a boundary
 
 These are workspace files, not repo files: read them from the workspace root, never from
 inside the worktree, and never stage them. The evidence in particular **does not travel
 with the PR** — no reviewer can open `testing.md` from GitHub — so the PR body's Testing
 section has to carry the evidence itself. Lift that repo's section out of `testing.md`:
 what is guaranteed, and the commands that prove it. A link alone is not enough.
+
+The API contract travels the same way and for a sharper reason: its readers are the
+frontend and mobile engineers reviewing this PR, and they cannot open a workspace path.
+If `api-contract.md` exists and this repo is the provider, lift the entries this PR
+implements into the body — the shapes, the nullability, and the error codes, not a
+summary of them.
 
 ---
 
@@ -227,9 +234,15 @@ write "N/A" rather than deleting one.
 <this repo's section of testing.md, written out: what is guaranteed, and the commands
 that prove it. Not a link - the file is not in this repo and the reviewer cannot open it.>
 
+## API contract
+
+<the entries of api-contract.md this PR implements, written out: request and response
+shapes, nullability, enum values, error codes, socket delivery semantics. Omit the
+section entirely when the PR changes nothing a consumer can observe.>
+
 ## Related
 
-- Task docs: `docs/<date>_<task>/` — PRD, plan, and evidence (workspace-local)
+- Task docs: `docs/<date>_<task>/` — PRD, plan, contract, and evidence (workspace-local)
 - Milestone <N>
 - <sibling PRs in this task, if any>
 ```

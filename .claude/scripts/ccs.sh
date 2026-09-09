@@ -287,7 +287,7 @@ EOF
 
 check_artifacts() {
   # One task, one directory: docs/<YYYY-MM-DD>_<task>/ holding prd.md, plan.md,
-  # plan-m<N>.md, testing.md and log.md. Anything else in docs/ is a stray.
+  # plan-m<N>.md, api-contract.md, testing.md and log.md. Anything else in docs/ is a stray.
   local log d f name task bad=0 space entry
   for entry in "$ROOT"/docs/*; do
     [ -e "$entry" ] || continue
@@ -306,8 +306,8 @@ check_artifacts() {
     for f in "$entry"/*; do
       [ -e "$f" ] || continue
       case "$(basename "$f")" in
-        prd.md|plan.md|log.md|testing.md|plan-m[0-9]*.md) ;;
-        *) finding low artifacts "docs/$name/$(basename "$f") is not one of prd.md, plan.md, plan-m<N>.md, testing.md, log.md"
+        prd.md|plan.md|log.md|testing.md|api-contract.md|plan-m[0-9]*.md) ;;
+        *) finding low artifacts "docs/$name/$(basename "$f") is not one of prd.md, plan.md, plan-m<N>.md, api-contract.md, testing.md, log.md"
            bad=$((bad + 1)) ;;
       esac
     done
