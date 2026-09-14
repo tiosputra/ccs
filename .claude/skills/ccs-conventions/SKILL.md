@@ -50,7 +50,7 @@ is a new line in the script, not a new paragraph in the command.
 | You want | Build | Because |
 |---|---|---|
 | Deterministic facts about the workspace | a **script** | Same answer every run, diffable, testable with `bash -n` |
-| A user-typed multi-step procedure | a **command** | `/name` is the trigger; it can eagerly run a script with `` !`…` `` |
+| A user-typed multi-step procedure | a **command** | `/name` is the trigger; it can eagerly run a script by putting a bang directly before a backticked command |
 | Rules that apply whenever a kind of file is touched | a **skill** | Auto-triggers from its `description`; no one has to remember it |
 | The same procedure reachable without typing a command | a **skill** that routes to the script | Skills are model-triggered, commands are user-triggered |
 | A hard rule that must hold even if a session ignores it | a **hook** | `guard.sh`. Prose is advice; a `PreToolUse` hook is enforcement |
@@ -73,7 +73,7 @@ allowed-tools: Bash(.claude/scripts/thing.sh:*), Read, Write
 
 ## Result
 
-!`.claude/scripts/thing.sh slash $ARGUMENTS`
+BANG`.claude/scripts/thing.sh slash $ARGUMENTS`
 
 ## What this is
 …orientation for a session that has never run this before…
@@ -82,11 +82,15 @@ allowed-tools: Bash(.claude/scripts/thing.sh:*), Read, Write
 …what to do with the result…
 ```
 
-- **`!` runs eagerly, before the model reads anything.** So the script must be
-  safe to run unconditionally. `space.sh slash remove` prints a *report* and
-  removes nothing, precisely because the removal must not happen before the
-  model has decided it is safe. Anything destructive gets a `slash` mode that
-  only looks.
+- **A leading bang runs eagerly, before the model reads anything.** So the
+  script must be safe to run unconditionally. `space.sh slash remove` prints a
+  *report* and removes nothing, precisely because the removal must not happen
+  before the model has decided it is safe. Anything destructive gets a `slash`
+  mode that only looks.
+
+  `BANG` in the template above stands for that literal character. A real one in
+  this file would run every time the skill loads - which is the bug this wording
+  avoids.
 - **Dispatch on a `mode` line.** The script prints `mode<TAB>add` first; the
   command has a section per mode and the model follows the one that matches.
 - **`allowed-tools` narrowly.** Without it every invocation prompts; too wide
