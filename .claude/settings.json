@@ -10,6 +10,8 @@
       "Bash(.claude/scripts/space.sh add *)",
       "Bash(.claude/scripts/ccs.sh:*)",
       "Bash(bash -n .claude/scripts/ccs.sh)",
+      "Bash(.claude/scripts/learn.sh:*)",
+      "Bash(bash -n .claude/scripts/learn.sh)",
       "Bash(.claude/scripts/release-notes.sh:*)",
       "Bash(bash -n .claude/scripts/release-notes.sh)",
       "Bash(.claude/scripts/guard-test.sh)",

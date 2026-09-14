@@ -132,7 +132,7 @@ each relevant category with file references:
 |---|---|
 | Naming | File, function, type, command, or script naming in the affected area |
 | Error handling | How failures are raised, returned, logged, or handled gracefully |
-| Logging | Levels, format, and what gets logged |
+| Logging | Levels, format, and what gets logged - check it against the `logging` skill and the repo's `.claude/learned/<repo>/logging.md` |
 | Data access | Repository, service, query, or filesystem patterns |
 | Tests | Test file location, framework, fixtures, and assertion style |
 

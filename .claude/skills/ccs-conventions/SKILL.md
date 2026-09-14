@@ -130,6 +130,33 @@ allowed-tools: Bash(.claude/scripts/thing.sh:*), Read, Write
   and reference it from at least one command — `/ccs` flags scripts nothing
   invokes.
 
+## Skills that learn: method and facts
+
+A skill that needs facts about a repo is split, so the method travels to any
+project and the facts are measured once per repo instead of on every load:
+
+| Part | Where | Holds |
+|---|---|---|
+| method | `skills/<skill>/SKILL.md` | How to do it well anywhere. Names no repo, service, or in-house library |
+| checklist | `skills/<skill>/discover.md` | What to find in a repo, how to search without known misses, the exact output shape |
+| facts | `.claude/learned/<repo>/<skill>.md` | What is true of one repo. Gitignored, learned per machine |
+
+- The frontmatter declares it: `learns: true`, plus `fingerprint:` entries under
+  `metadata` that name generic things worth watching. The learned file adds
+  its own `watch:` list for what that repo's facts rest on.
+- `learn.sh` holds the facts about the facts: fresh, stale, unstamped or
+  missing, and it stamps the date and fingerprint. `/learn` does the scan. It
+  is the same split as everywhere else.
+- `SKILL.md` opens with a section that loads the learned file, and says the
+  learned file wins where the two disagree about that repo.
+- **A repo or service name in a learning skill's `SKILL.md` is a fact that leaked
+  into the method.** Move it to the learned file.
+- Workspace glue is a third kind, neither method nor fact: spaces, gates, where
+  `testing.md` goes. It belongs in the command that invokes the skill, the way
+  `/plan-prd` hands `tdd-workflow` its report path.
+- Not every skill learns. One or two facts do not earn a learned file and a
+  fingerprint; a repo's own `AGENTS.md` is enough.
+
 ## Naming
 
 One kebab-case **task** name is reused everywhere: space directory, branch,
