@@ -36,13 +36,15 @@ swing/
 ├── release/                deployment runbooks, one per release
 │
 ├── .claude/
-│   ├── commands/           /plan-prd, /plan, /space, /pr, /ccs
-│   ├── skills/             tdd-workflow, ccs-conventions, the pattern skills
+│   ├── commands/           /plan-prd, /plan, /space, /pr, /ccs, /learn
+│   ├── skills/             tdd-workflow, logging, ccs-conventions, the pattern skills
+│   ├── learned/            per-repo facts a skill learned - gitignored, see /learn
 │   ├── agents/             the reviewers
 │   ├── ccs-notes.md        friction found while running tasks
 │   └── scripts/
 │       ├── space.sh        creates and tears down spaces
 │       ├── ccs.sh          checks the workspace system itself
+│       ├── learn.sh        which learned facts exist, and whether they are stale
 │       └── guard.sh        PreToolUse hook - keeps repos/ read-only
 ```
 

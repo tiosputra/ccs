@@ -31,6 +31,12 @@
 # Per-machine Claude Code overrides. settings.json is shared; .local is not.
 .claude/settings.local.json
 
+# What skills learned about each repo (.claude/learned/<repo>/<skill>.md): which
+# logger a service uses, where it leaks data. They describe the private services,
+# so like docs/ only the README is tracked; each machine learns its own via /learn.
+/.claude/learned/*
+!/.claude/learned/README.md
+
 # Per-machine workspace settings - branch prefix, default base ref. Everyone
 # has their own; .env.example is the tracked template. See .claude/scripts/config.sh.
 /.env
