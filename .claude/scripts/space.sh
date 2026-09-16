@@ -537,6 +537,10 @@ cmd_rm() {
     [ "$force" -eq 1 ] && rm_args=(worktree remove --force "$wt")
     if git -C "$dir" "${rm_args[@]}" >/dev/null 2>&1; then
       ok "$repo  worktree removed"
+      # Its code-review-graph data describes a worktree that no longer exists.
+      if [ -x "$SCRIPT_DIR/graph.sh" ] && [ -n "$("$SCRIPT_DIR/graph.sh" drop "$task" "$repo" 2>/dev/null)" ]; then
+        dim "$repo  dropped its code-review-graph data"
+      fi
     else
       fail "$repo  worktree remove failed"
       failed=$((failed + 1))

@@ -48,3 +48,5 @@
 *~
 
 .env
+# code-review-graph data - rebuilt from the code on demand by .claude/scripts/graph.sh.
+/.code-review-graph/

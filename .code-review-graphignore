@@ -1,0 +1,68 @@
+# What code-review-graph leaves out of every graph built by .claude/scripts/graph.sh.
+#
+# The tool itself only reads this file from a repo's own root, and repos/ is
+# read-only, so it never sees this one. graph.sh applies it instead: it builds
+# each graph from a scratch copy of the git index with these paths removed, so
+# they are never parsed at all. The real index is not touched.
+#
+# Patterns are relative to each repo's root and apply to every repo:
+#
+#   name/        a directory of that name, at any depth
+#   /dir/        a directory at the repo root only
+#   a/b/c        a path from the repo root
+#   *.ext        a file name glob, at any depth
+#
+# No `!` negation. Editing this file marks every graph stale in `/graph status`.
+#
+# Already skipped by the tool: node_modules/, vendor/, .dart_tool/, dist/,
+# build/, lockfiles, *.min.js, *.map. Not repeated here.
+
+# protoc output - Go stubs in pkg/grpc, JS stubs in src/generated.
+*.pb.go
+*_pb.js
+*_pb.d.ts
+
+# Flutter codegen.
+*.g.dart
+*.freezed.dart
+*.gr.dart
+*.mocks.dart
+
+# Schema history. Nothing calls a migration, so every one of them would show up
+# in dead-code and search results as noise. Measured 2026-09-16: 701 of
+# backend's 2,538 parsed files.
+migrations/
+seeders/
+
+# Third-party packages vendored into the Flutter app, and its platform shells.
+country-calling-code-picker-*/
+infinite_scroll_pagination-*/
+fxendit-ios-support/
+/android/
+/ios/
+
+# Test-run output. Coverage reporters emit instrumented copies of the source,
+# which would double every covered symbol in the graph.
+coverage/
+
+# Statically served assets. Nothing imports them, so their symbols are
+# unreachable noise. Measured 2026-09-16: backend 88 files (65 jpg, 21 png,
+# 2 md), admin 38 (including 9 vendor .js served, never imported), sport 13.
+public/
+
+# Fixture and dump JSON at the backend root.
+/availabilities.json
+/beta-tester.json
+/user_dummy.json
+
+# Credentials committed to the checkouts. tree-sitter has no parser for most of
+# these, so the rule is defence in depth: a graph should never be a way to read
+# a key. Measured 2026-09-16: 9 tracked files, 4 of them already under
+# mobile's /android/ and /ios/.
+*firebase*.json
+google-services.json
+GoogleService-Info.plist
+*.pem
+*.p12
+*.jks
+*.keystore

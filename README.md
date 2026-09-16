@@ -36,7 +36,7 @@ swing/
 ├── release/                deployment runbooks, one per release
 │
 ├── .claude/
-│   ├── commands/           /plan-prd, /plan, /space, /pr, /ccs, /learn
+│   ├── commands/           /plan-prd, /plan, /space, /pr, /ccs, /learn, /graph
 │   ├── skills/             tdd-workflow, logging, ccs-conventions, the pattern skills
 │   ├── learned/            per-repo facts a skill learned - gitignored, see /learn
 │   ├── agents/             the reviewers
@@ -45,6 +45,7 @@ swing/
 │       ├── space.sh        creates and tears down spaces
 │       ├── ccs.sh          checks the workspace system itself
 │       ├── learn.sh        which learned facts exist, and whether they are stale
+│       ├── graph.sh        code-review-graph graphs, kept outside the repos they describe
 │       └── guard.sh        PreToolUse hook - keeps repos/ read-only
 ```
 
@@ -169,6 +170,46 @@ so the summary is captured while the diffs still exist:
 `remove` refuses to tear down a space that has uncommitted changes or commits
 that have not reached any remote. Push or stash first, or pass `--force` to
 discard on purpose.
+
+### Code graphs
+
+[code-review-graph](https://github.com/tirth8205/code-review-graph) parses a repo
+into a graph of calls, imports and tests, so a review can ask what a change
+touches without reading the whole codebase. Install it once per machine:
+
+```
+pipx install code-review-graph
+```
+
+Then use it through `/graph`, never directly. Run bare, the tool writes its
+data into the repo it reads. `graph.sh` keeps every graph under a gitignored
+`.code-review-graph/` at the root instead:
+
+```
+/graph                                   what is built, and whether it is fresh
+/graph build backend                     graph repos/backend
+/graph review feature-booking            what each repo's change touches, against its base
+/graph run feature-booking/backend query callers_of createBooking
+```
+
+`/plan-prd` runs `review` before dispatching the reviewers, so it needs no
+typing during a task. `/space remove` drops a space's graphs along with it.
+Builds leave out generated code, migrations and vendored packages, listed in
+the tracked `.code-review-graphignore`.
+
+The tracked `.mcp.json` also registers `backend`, `payment`, `player` and
+`sport` as read-only MCP servers, so the graph of a checkout can be queried as
+a tool. They serve `repos/<repo>` from the graph `graph.sh` built, and expose
+only the six tools that read. Build the graphs before they are any use:
+
+```
+/graph build all
+```
+
+Do **not** run `code-review-graph install`. It writes 15 files into the repo it
+targets — MCP configs, instruction files, an append to that repo's `CLAUDE.md`
+— and a hook that rebuilds the graph inside the checkout. `repos/` is read-only,
+and in a space those files would land in the pull request.
 
 ## `space.sh` reference
 

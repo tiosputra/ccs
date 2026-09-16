@@ -14,6 +14,8 @@
       "Bash(bash -n .claude/scripts/learn.sh)",
       "Bash(.claude/scripts/release-notes.sh:*)",
       "Bash(bash -n .claude/scripts/release-notes.sh)",
+      "Bash(.claude/scripts/graph.sh:*)",
+      "Bash(bash -n .claude/scripts/graph.sh)",
       "Bash(.claude/scripts/guard-test.sh)",
       "Bash(.claude/scripts/guard-test.sh -q)",
       "Bash(bash -n .claude/scripts/guard-test.sh)",

@@ -309,8 +309,15 @@ Now run straight through. No further permission prompts; Gate 1 covered all of t
    instead of scattering a copy into each service repo. Every repo appends its own
    `## <repo>` section to that same file.
 
-4. **Review it.** Dispatch by language, giving each reviewer the working directory and the
-   base commit from the PRD:
+4. **Review it.** First run `.claude/scripts/graph.sh review <task>`. It rebuilds each
+   repo's code-review-graph if stale and prints, per repo, the changed functions, affected
+   flows and the changed functions no test covers. `/graph` says how to read it. If the
+   result is an `error` row (the tool is not installed, or the build failed), say so in
+   one line and review without it; the graph helps the review and never blocks it.
+
+   Then dispatch by language, giving each reviewer the working directory, the base commit
+   from the PRD, and that repo's `review` block. Tell reviewers they can ask the graph
+   who calls a function with `.claude/scripts/graph.sh run <task>/<repo> query callers_of <name>`:
    - Go (`sport`, `player`) -> `go-reviewer`
    - TypeScript (`backend`) -> `typescript-reviewer`
 
