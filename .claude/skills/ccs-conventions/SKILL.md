@@ -144,6 +144,7 @@ project and the facts are measured once per repo instead of on every load:
 | method | `skills/<skill>/SKILL.md` | How to do it well anywhere. Names no repo, service, or in-house library |
 | checklist | `skills/<skill>/discover.md` | What to find in a repo, how to search without known misses, the exact output shape |
 | facts | `.claude/learned/<repo>/<skill>.md` | What is true of one repo. Gitignored, learned per machine |
+| rules | `<repo>/AGENTS.md` | What that repo's team requires. Theirs, committed with their code, and outside this workspace |
 
 - The frontmatter declares it: `learns: true`, plus `fingerprint:` entries under
   `metadata` that name generic things worth watching. The learned file adds
@@ -151,15 +152,23 @@ project and the facts are measured once per repo instead of on every load:
 - `learn.sh` holds the facts about the facts: fresh, stale, unstamped or
   missing, and it stamps the date and fingerprint. `/learn` does the scan. It
   is the same split as everywhere else.
-- `SKILL.md` opens with a section that loads the learned file, and says the
-  learned file wins where the two disagree about that repo.
+- `SKILL.md` opens with a section that loads the repo's rules and facts, and
+  ranks them: `AGENTS.md`, then the learned file, then the skill — each winning
+  only where it actually speaks. A skill that prescribes how code is written says
+  so even when it does not learn; `CLAUDE.md` is the full statement, the skill
+  just has to not contradict it.
+- **`AGENTS.md` is the repo's, not ours.** Never write one from here, never
+  restate one inside a skill or a learned file, and never mirror a rule out of one
+  into `.claude/` — a copy drifts the moment the team edits theirs, and then the
+  workspace is confidently wrong. Point at the file.
 - **A repo or service name in a learning skill's `SKILL.md` is a fact that leaked
   into the method.** Move it to the learned file.
 - Workspace glue is a third kind, neither method nor fact: spaces, gates, where
   `testing.md` goes. It belongs in the command that invokes the skill, the way
   `/plan-prd` hands `tdd-workflow` its report path.
 - Not every skill learns. One or two facts do not earn a learned file and a
-  fingerprint; a repo's own `AGENTS.md` is enough.
+  fingerprint; a repo's own `AGENTS.md` is enough. When a team writes down what a
+  learned file had been guessing, the learned file gets shorter, not longer.
 
 ## Naming
 
@@ -172,10 +181,14 @@ add a command named for a concept an existing command already owns — `/space`
 owns spaces, so a `space-manager` beside it splits the concept in two.
 
 **One task, one directory.** Everything written about a task lives in
-`docs/<YYYY-MM-DD>_<task>/`: `prd.md`, `plan.md` (then `plan-m2.md`,
-`plan-m3.md`), `testing.md`, `log.md`. If a new kind of task document comes
-along, it becomes another file in that directory — never a new top-level
-directory beside it, and never a copy inside a service repo. The date is the day
+`docs/<YYYY-MM-DD>_<task>/`. The standard artifacts have fixed names that
+commands find them by: `prd.md`, `plan.md` (then `plan-m2.md`, `plan-m3.md`),
+`api-contract.md`, `testing.md`, `log.md`. Anything else a task produces — SQL,
+CSV, examples, notes for another team — is a supporting file beside them, free to
+name. A new kind of task document is another file in that directory — never a new
+top-level directory beside it, and never a copy inside a service repo. A command
+that starts reading a supporting file by name has made it a standard artifact:
+add it to the list, to `CLAUDE.md`, and to `/ccs`'s `check_artifacts`. The date is the day
 the task opened and never changes, so commands find a directory by globbing
 `docs/*_<task>/` and never by reconstructing its name.
 

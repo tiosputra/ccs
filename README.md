@@ -20,6 +20,7 @@ whiplash between them.
 swing/
 ├── repos/                  canonical checkouts — the source of truth
 │   └── <service>/              one clone per service, however many there are
+│       └── AGENTS.md               that team's rules for that repo, where it has one
 │
 ├── spaces/                 one directory per task, worktrees inside
 │   └── add-label/
@@ -31,7 +32,8 @@ swing/
 │       ├── plan.md             milestone 1 (plan-m2.md, plan-m3.md follow)
 │       ├── api-contract.md     what consumers see change - read by frontend/mobile
 │       ├── testing.md          RED/GREEN evidence, one section per repo
-│       └── log.md              wrap-up, written just before teardown
+│       ├── log.md              wrap-up, written just before teardown
+│       └── <anything>          supporting files - .sql, .csv, examples, notes
 │
 ├── release/                deployment runbooks, one per release
 │
@@ -52,6 +54,12 @@ swing/
 Nothing in `repos/` is ever worked in directly — treat those checkouts as
 read-only origins. All editing happens in `spaces/<task>/<repo>/`, except for
 the repos listed in `REFERENCE_REPOS`, which are read-only there too.
+
+A repo that carries an `AGENTS.md` carries its team's rules for that codebase,
+and those rules outrank this workspace's skills and conventions wherever the two
+disagree — see `CLAUDE.md`. What they do not move is where work happens: the
+space, the two gates, the task's documents, and `/pr` are the same for every
+repo.
 
 ## Repos
 
@@ -318,6 +326,9 @@ no space and no `/pr`; `ccs-conventions` describes how its pieces are shaped.
 
 - Never write anything under `repos/` — see `CLAUDE.md`. A `PreToolUse` hook
   (`.claude/scripts/guard.sh`) enforces it, so this is not a matter of judgment.
+- Read a repo's `AGENTS.md` before planning or writing in it, and follow it over
+  any skill here. It belongs to that repo's team: change it in that repo's space,
+  through `/pr`, and never restate it under `.claude/`.
 - A repo listed in `REFERENCE_REPOS` is read-only in a space too, not just in
   `repos/`. The same hook enforces that.
 - `git add`, `git commit`, and `git push` are fine **inside a space**. Committing

@@ -15,6 +15,13 @@ This skill governs how teams change a boundary. It complements `api-design`,
 which governs what a good API looks like, and `ai-regression-testing`, which
 guards fixed bugs from returning.
 
+## Repo rules first
+
+If the repo being changed carries an `AGENTS.md` at its root, read it before
+applying anything below, and follow it wherever the two disagree. It was written
+for that codebase; this file was not. Where it is silent, this skill applies.
+See `CLAUDE.md`.
+
 ## In this workspace
 
 The canonical artifact is `docs/<YYYY-MM-DD>_<task>/api-contract.md`, written by

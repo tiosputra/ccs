@@ -124,7 +124,18 @@ closed task's paths to satisfy the current convention.
 
 ## Pattern Grounding
 
-Before writing the plan, search the task's worktrees — `spaces/<task>/<repo>/`, never
+**Read each worktree's `AGENTS.md` first**, where it has one:
+
+```bash
+for r in spaces/<task>/*/; do [ -f "$r/AGENTS.md" ] && echo "$r"; done
+```
+
+That file is the team's rules for that repo and outranks every skill and pattern
+below it (`CLAUDE.md`). A plan that proposes something it forbids is wrong before
+it is written, so read it before grounding, not after. Repos differ: a rule found
+in one worktree says nothing about the next.
+
+Then search the task's worktrees — `spaces/<task>/<repo>/`, never
 `repos/` — for conventions the implementation should mirror. Capture the top example for
 each relevant category with file references:
 
@@ -132,11 +143,16 @@ each relevant category with file references:
 |---|---|
 | Naming | File, function, type, command, or script naming in the affected area |
 | Error handling | How failures are raised, returned, logged, or handled gracefully |
-| Logging | Levels, format, and what gets logged - check it against the `logging` skill and the repo's `.claude/learned/<repo>/logging.md` |
+| Logging | Levels, format, and what gets logged - check it against the repo's `AGENTS.md`, then `.claude/learned/<repo>/logging.md`, then the `logging` skill |
 | Data access | Repository, service, query, or filesystem patterns |
 | Tests | Test file location, framework, fixtures, and assertion style |
 
 If no similar code exists, state that explicitly. Do not invent a pattern.
+
+Where an `AGENTS.md` rule changes what the plan would otherwise say — a skill's
+convention it overrides, a tool it requires first, a step it forbids — write that
+into the plan in one line, next to the step it governs. The reviewer at Gate 2
+should not have to re-read the repo to see why the plan departs from a skill.
 
 ## API Contract
 

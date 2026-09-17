@@ -13,6 +13,13 @@ coverage. The workspace holds services in more than one language, so the cycle b
 language-neutral: every step names *what* must be proven, and Step 0 resolves *which
 commands* prove it for the repo being touched.
 
+## Repo rules first
+
+If the repo being changed carries an `AGENTS.md` at its root, read it before
+applying anything below, and follow it wherever the two disagree. It was written
+for that codebase; this file was not. Where it is silent, this skill applies.
+See `CLAUDE.md`.
+
 ## When to Activate
 
 - Writing new features or functionality

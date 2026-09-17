@@ -147,7 +147,10 @@ Plan: docs/<date>_<task>/plan.md
 ```
 
 `<type>` is `feat`, `fix`, `refactor`, `test`, `docs`, or `chore`. `<scope>` is the area
-touched, not the repo name. One commit per repo unless the work genuinely separates into
+touched, not the repo name. If the repo's `AGENTS.md` sets its own commit-message or
+prose conventions — a different subject form, no em dashes, no decorative characters —
+follow them for that repo's commit and PR body; they outrank the shape above
+(`CLAUDE.md`), and a task spanning two repos may write its message two ways. One commit per repo unless the work genuinely separates into
 independent changes — do not split a single milestone into artificial commits.
 
 Per this project's `CLAUDE.md`, do not add `Co-Authored-By` or generated-with trailers

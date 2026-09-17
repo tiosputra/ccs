@@ -50,6 +50,11 @@ unasked.
 
 ### 1. Read before scanning
 
+- **The repo's `AGENTS.md`, if it has one.** It is the team's own statement of
+  how this repo works, and it outranks whatever the scan concludes: where the
+  code and the file disagree, the file is the rule and the code is what has not
+  caught up. Do not copy it into the learned file — point at it, and record only
+  what it does not say.
 - `discover` is the skill's checklist: what to look for, how to search without
   the misses earlier scans made, and **the exact shape of the file to write**.
   Follow its headings; a learned file in some other shape is one the next
@@ -71,8 +76,14 @@ reader can tell absence from not looking.
 
 - The frontmatter shape is in `discover`. Leave `learned:` and `fingerprint:`
   as `pending`; the script fills them.
+- Where the repo has an `AGENTS.md`, say so at the top of the file and note which
+  of its sections cover this skill, so a later session reads the rule rather than
+  the scan of it. A measured habit that its rules forbid is a trap to name, not a
+  pattern to record.
 - `watch:` lists what the scan found this repo's facts rest on (the dependency
-  line, the wrapper file, the middleware mount). Keep it narrow: watching all
+  line, the wrapper file, the middleware mount). Where the repo has an
+  `AGENTS.md`, watch it too — `files AGENTS.md` — so a rewrite of the rules makes
+  the scan stale, which is the point: the rules outrank it. Keep it narrow: watching all
   of `go.mod` makes every dependency bump look like a change, and a status that
   is always stale gets ignored.
 - `reviewed: no`, always. Only the user sets `yes`.

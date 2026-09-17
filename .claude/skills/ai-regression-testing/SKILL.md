@@ -9,6 +9,13 @@ metadata:
 
 Testing patterns specifically designed for AI-assisted development, where the same model writes code and reviews it — creating systematic blind spots that only automated tests can catch.
 
+## Repo rules first
+
+If the repo being changed carries an `AGENTS.md` at its root, read it before
+applying anything below, and follow it wherever the two disagree. It was written
+for that codebase; this file was not. Where it is silent, this skill applies.
+See `CLAUDE.md`.
+
 ## In this workspace
 
 The examples below come from a Next.js + Supabase + Vitest project. Nothing in swing

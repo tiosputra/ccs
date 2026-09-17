@@ -13,6 +13,13 @@ holds the **facts** for one repo: which logger backend uses, how sport's
 request ID travels, which habits not to copy. The skill reads this file when it
 loads and follows it where the two disagree.
 
+Above both sits the repo's own `AGENTS.md`, where it has one. These files are a
+scan — measured on one machine, by a model, at one moment. `AGENTS.md` is the
+team's decision, committed with the code, so it wins over a file here as well as
+over the skill (`CLAUDE.md`). A learned file should point at it rather than
+restate it, and a habit the scan measured but the rules forbid is a trap to name,
+not a pattern to record.
+
 | Step | Who |
 |---|---|
 | Scan a repo and write the file in the shape the skill's `discover.md` gives | `/learn <skill> <repo>` |

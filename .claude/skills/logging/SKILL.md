@@ -20,6 +20,9 @@ facts about one repo, so they live in its learned file, not here.
 The repo is the checkout being changed: `spaces/<task>/<repo>/` means `<repo>`.
 A project with no `repos/` is one repo, named after its directory.
 
+Start with the repo's own `AGENTS.md`, if it has one — the team's rules, committed
+beside the code. Then the learned file:
+
 ```
 .claude/scripts/learn.sh status logging
 ```
@@ -33,8 +36,19 @@ A project with no `repos/` is one repo, named after its directory.
 If the row says `unreviewed`, follow the file but say in your report that no
 one has checked it yet.
 
-Where the learned file and this skill disagree about that repo, the learned
-file wins, because it was measured there. Where it is silent, this skill applies.
+Three layers, highest first, each winning only where it actually speaks:
+
+| Layer | Why it ranks there |
+|---|---|
+| `<repo>/AGENTS.md` | The team's own rules for that codebase, committed with it |
+| `.claude/learned/<repo>/logging.md` | Measured in that repo, but on one machine and by a scan |
+| this skill | The method, true anywhere, measured nowhere |
+
+So where `AGENTS.md` and the learned file disagree about the logger, the level,
+or what never to log, follow `AGENTS.md` and say so in your report — the learned
+file is a scan of the code, and the repo's rule may be what the code is moving
+towards. Where `AGENTS.md` is silent, the learned file wins over this skill,
+because it was measured there. Where both are silent, this skill applies.
 
 ## Use the logger the repo already has
 

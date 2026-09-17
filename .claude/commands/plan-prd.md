@@ -288,7 +288,20 @@ Now run straight through. No further permission prompts; Gate 1 covered all of t
    Then update the PRD: replace *Space to create* with the real values, change the
    status line to `Status: IN PROGRESS`, and bump *Last updated* to today's `date +%F`.
 
-2. **Plan the next pending milestone** — follow `/plan`'s PRD artifact mode. Write the plan
+2. **Read each new worktree's `AGENTS.md`**, where it has one:
+
+   ```bash
+   for r in spaces/<task>/*/; do [ -f "$r/AGENTS.md" ] && echo "$r"; done
+   ```
+
+   These are the teams' rules for their own repos, and they outrank this command's
+   conventions, the skills, and the learned files wherever they disagree
+   (`CLAUDE.md`). Read them now, before the plan is written, so the plan is already
+   shaped by them — not after the code is, when the fix is a rewrite. They do not
+   change where the work happens: the space, the two gates, and the task's
+   documents in `docs/<YYYY-MM-DD>_<task>/` are this workspace's, and stay.
+
+3. **Plan the next pending milestone** — follow `/plan`'s PRD artifact mode. Write the plan
    beside the PRD, in the same directory: `plan.md` for milestone 1, `plan-m<N>.md` after
    that, with working directories and base commits filled in. Flip that milestone's row to
    `in-progress`.
@@ -300,7 +313,7 @@ Now run straight through. No further permission prompts; Gate 1 covered all of t
    still hypothetical, rather than reverse-engineered from the finished handler. One file
    per task: a later milestone appends its entries to the same one.
 
-3. **Implement it** with the `tdd-workflow` skill, once per repo the milestone touches.
+4. **Implement it** with the `tdd-workflow` skill, once per repo the milestone touches.
    Hand it four things: the plan path, the working directory `spaces/<task>/<repo>/`, the
    evidence report path `docs/<YYYY-MM-DD>_<task>/testing.md`, and the API contract
    `docs/<YYYY-MM-DD>_<task>/api-contract.md` when the milestone wrote one. The skill is space-blind
@@ -309,14 +322,21 @@ Now run straight through. No further permission prompts; Gate 1 covered all of t
    instead of scattering a copy into each service repo. Every repo appends its own
    `## <repo>` section to that same file.
 
-4. **Review it.** First run `.claude/scripts/graph.sh review <task>`. It rebuilds each
+   Tell it, in one line per repo, what that repo's `AGENTS.md` requires of the
+   implementation — the tools to reach for first, the style it fixes, the steps it
+   forbids. The skill is handed directories, so it will not go looking, and a rule
+   found in one repo does not apply in the next.
+
+5. **Review it.** First run `.claude/scripts/graph.sh review <task>`. It rebuilds each
    repo's code-review-graph if stale and prints, per repo, the changed functions, affected
    flows and the changed functions no test covers. `/graph` says how to read it. If the
    result is an `error` row (the tool is not installed, or the build failed), say so in
    one line and review without it; the graph helps the review and never blocks it.
 
    Then dispatch by language, giving each reviewer the working directory, the base commit
-   from the PRD, and that repo's `review` block. Tell reviewers they can ask the graph
+   from the PRD, that repo's `review` block, and the path to its `AGENTS.md` if it has
+   one — a reviewer applying a skill's convention over the repo's own rule files a
+   finding the team will reject. Tell reviewers they can ask the graph
    who calls a function with `.claude/scripts/graph.sh run <task>/<repo> query callers_of <name>`:
    - Go (`sport`, `player`) -> `go-reviewer`
    - TypeScript (`backend`) -> `typescript-reviewer`
@@ -324,7 +344,7 @@ Now run straight through. No further permission prompts; Gate 1 covered all of t
    Fix anything the review rates CRITICAL or HIGH, then re-run the affected tests. Report
    MEDIUM findings without necessarily fixing them; that is the user's call at Gate 2.
 
-5. **Mark the milestone** `complete` in the PRD.
+6. **Mark the milestone** `complete` in the PRD.
 
 ### Phase 7 — GATE 2: done, ask about the PR
 
@@ -343,6 +363,9 @@ Uncommitted in: spaces/<task>/<repo>/   (nothing committed yet)
 
 Review findings left open:
   - {MEDIUM finding, or "none"}
+
+Followed from AGENTS.md, against workspace default:
+  - {repo}: {what its rule required instead, or "none"}
 
 Ready to open the PR? That will stage, commit, push <prefix>/<task>, and open one PR
 per repo against {source branch}. Or say what to change first.

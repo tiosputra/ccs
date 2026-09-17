@@ -242,7 +242,10 @@ check_branch_prefix() {
     [ -n "$task" ] || continue
     for f in "$d"prd.md "$d"plan*.md; do
       [ -f "$f" ] || continue
-      for pfx in $(grep -ohE "[a-z][a-z0-9-]*/$task\b" "$f" 2>/dev/null | sed 's|/.*||' | sort -u); do
+      # The name must end the token. `\b` would stop at a dot, so a file path like
+      # services/<task>.service.ts read as a branch called 'services'. A trailing
+      # dot still counts when it ends a sentence rather than starts an extension.
+      for pfx in $(grep -ohE "[a-z][a-z0-9-]*/$task([^a-zA-Z0-9_/.-]|\.([^a-zA-Z0-9]|$)|$)" "$f" 2>/dev/null | sed 's|/.*||' | sort -u); do
         # Path segments, not branch prefixes: a plan naming
         # docs/testing/... must not read as a branch called 'testing'.
         # The .claude/ subdirectories are here for the same reason - machinery
@@ -287,7 +290,9 @@ EOF
 
 check_artifacts() {
   # One task, one directory: docs/<YYYY-MM-DD>_<task>/ holding prd.md, plan.md,
-  # plan-m<N>.md, api-contract.md, testing.md and log.md. Anything else in docs/ is a stray.
+  # plan-m<N>.md, api-contract.md, testing.md and log.md, plus any supporting
+  # file (.sql, .csv, notes). A file loose in docs/ is a stray, and so is a renamed
+  # copy of a standard artifact - plan-v2.md is invisible to every command.
   local log d f name task bad=0 space entry
   for entry in "$ROOT"/docs/*; do
     [ -e "$entry" ] || continue
@@ -306,9 +311,16 @@ check_artifacts() {
     for f in "$entry"/*; do
       [ -e "$f" ] || continue
       case "$(basename "$f")" in
-        prd.md|plan.md|log.md|testing.md|api-contract.md|plan-m[0-9]*.md) ;;
-        *) finding low artifacts "docs/$name/$(basename "$f") is not one of prd.md, plan.md, plan-m<N>.md, api-contract.md, testing.md, log.md"
-           bad=$((bad + 1)) ;;
+        prd.md|plan.md|log.md|testing.md|api-contract.md) ;;
+        plan-m[0-9]*.md)
+          # plan-m2.md yes, plan-m2-old.md no.
+          basename "$f" | grep -qE '^plan-m[0-9]+\.md$' || {
+            finding med artifacts "docs/$name/$(basename "$f") looks like a renamed plan - commands only read plan.md and plan-m<N>.md"
+            bad=$((bad + 1)); } ;;
+        prd[-_.]*|plan[-_.]*|testing[-_.]*|api-contract[-_.]*|log[-_.]*)
+          finding med artifacts "docs/$name/$(basename "$f") looks like a renamed copy of a standard artifact - commands read only the exact name, so revise that file instead"
+          bad=$((bad + 1)) ;;
+        *) ;;  # a supporting file
       esac
     done
   done
@@ -330,7 +342,7 @@ check_artifacts() {
       bad=$((bad + 1))
     fi
   done
-  [ "$bad" -eq 0 ] && ok artifacts "every task doc sits in docs/<date>_<task>/, logs trace back to PRDs, no orphan spaces"
+  [ "$bad" -eq 0 ] && ok artifacts "every task doc sits in docs/<date>_<task>/ under a standard or supporting name, logs trace back to PRDs, no orphan spaces"
 }
 
 check_notes() {

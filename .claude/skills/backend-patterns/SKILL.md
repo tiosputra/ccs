@@ -9,6 +9,13 @@ metadata:
 
 Backend architecture patterns and best practices for scalable server-side applications.
 
+## Repo rules first
+
+If the repo being changed carries an `AGENTS.md` at its root, read it before
+applying anything below, and follow it wherever the two disagree. It was written
+for that codebase; this file was not. Where it is silent, this skill applies.
+See `CLAUDE.md`.
+
 ## When to Activate
 
 - Designing REST or GraphQL API endpoints

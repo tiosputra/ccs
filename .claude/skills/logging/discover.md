@@ -67,8 +67,10 @@ watch:
 
 - `learned` and `fingerprint` stay `pending`; `learn.sh stamp` fills them.
 - `watch` holds what these facts rest on: the manifest line naming the logger or
-  shared module, the wrapper file, and the lines mounting logging or request-ID
-  middleware. Keep it narrow. A whole `go.mod` goes stale on every dependency
+  shared module, the wrapper file, the lines mounting logging or request-ID
+  middleware, and `files AGENTS.md` where the repo has one, since its rules
+  outrank this file and a rewrite of them should make the scan stale. Keep it
+  narrow. A whole `go.mod` goes stale on every dependency
   bump, and a status that is always stale gets ignored.
 - **Keep it under about 80 lines.** It is read on every load, so a reference
   manual defeats the point. Rules that hold in any repo belong in `SKILL.md`,
