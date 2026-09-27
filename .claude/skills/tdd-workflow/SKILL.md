@@ -143,8 +143,9 @@ here. "E2E" means through the service's own entrypoint, not through a UI.
 
 ### Step 0: Resolve the Test Commands for This Repo
 
-Do not assume a runner. The steps below use `<test>`, `<test-one>`, `<coverage>`, and
-`<build>` as placeholders. Resolve them once, from the repo you are actually editing:
+Do not assume a runner. The steps below use `<test>`, `<test-one>`, `<test-changed>`,
+`<coverage>`, and `<build>` as placeholders. Resolve them once, from the repo you are
+actually editing:
 
 1. **Identify the language.** `go.mod` at the repo root means Go. `package.json` plus
    `tsconfig.json` means TypeScript/Node.
@@ -156,11 +157,29 @@ Do not assume a runner. The steps below use `<test>`, `<test-one>`, `<coverage>`
 
 Command matrix:
 
-| Repo | Language | `<test>` | `<test-one>` | `<coverage>` | `<build>` |
-|---|---|---|---|---|---|
-| `backend` | TypeScript, Jest (`ts-jest`) | `npm test -- --maxWorkers=2 --workerIdleMemoryLimit=512MB` | `npx jest --maxWorkers=1 --watchman=false src/path/to/file.test.ts` | `npm run test:coverage -- --maxWorkers=2 --workerIdleMemoryLimit=512MB` | `npx tsc --noEmit` |
-| `sport` | Go 1.24 | `go test -p 4 ./...` | `go test -run TestName ./internal/domain` | `go test -p 4 -coverprofile=coverage.out ./internal/... && go tool cover -func=coverage.out` | `go build ./...` |
-| `player` | Go 1.24 | `go test -p 4 ./...` | `go test -run TestName ./internal/domain` | `go test -p 4 -coverprofile=coverage.out ./internal/... && go tool cover -func=coverage.out` | `go build ./...` |
+| Repo | Language | `<test>` | `<test-one>` | `<test-changed>` | `<coverage>` | `<build>` |
+|---|---|---|---|---|---|---|
+| `backend` | TypeScript, Jest (`ts-jest`) | `<jest> --maxWorkers=2 --workerIdleMemoryLimit=512MB` | `<jest> --maxWorkers=1 src/path/to/file.test.ts` | `<jest> --maxWorkers=2 --workerIdleMemoryLimit=512MB --changedSince=<base> --coverage --coverageReporters=text` | part of `<test-changed>` | `npx tsc --noEmit` |
+| `sport` | Go 1.24 | `go test -p 4 ./...` | `go test -run TestName ./internal/domain` | `go test -p 4 ./...` | `go test -p 4 -coverprofile=coverage.out ./internal/... && go tool cover -func=coverage.out` | `go build ./...` |
+| `player` | Go 1.24 | `go test -p 4 ./...` | `go test -run TestName ./internal/domain` | `go test -p 4 ./...` | `go test -p 4 -coverprofile=coverage.out ./internal/... && go tool cover -func=coverage.out` | `go build ./...` |
+
+- **`<jest>`** is `npx jest --config ../../../.claude/scripts/jest-transpile.config.js
+  --watchman=false`, run from the working directory (`spaces/<task>/<repo>/` is three
+  levels below the workspace root). That config is the repo's own
+  `jest.config.js` with ts-jest's per-worker typecheck turned off. `<build>` is the
+  typecheck, so a type error still fails the verify step, just not the test run. Do not
+  go back to plain `npm test`: see "Why transpile-only" below.
+- **`<base>`** is the repo's base commit from the plan's `**Base commits**` line. If you
+  were not given one, ask, the same as for the working directory.
+- **`<test-changed>`** runs every test whose import graph reaches a file changed since
+  `<base>`, committed or not, untracked included. With `--coverage` it reports coverage
+  for exactly those changed files, which is the coverage this skill asks for, so backend
+  needs no separate full-suite coverage run. `--coverageReporters=text` prints the table
+  and writes nothing; backend does not gitignore `coverage/`, so a file reporter would
+  leave a directory in the space for `/pr` to stage.
+- In Go, `go test ./...` already reruns only the packages whose inputs changed and
+  reports the rest `(cached)`. So after the first run in a space, `<test>` is the changed
+  set and `<test-changed>` is the same command.
 
 The concurrency flags are part of the command, not decoration - see "Bounded
 runs" below before dropping one.
@@ -173,12 +192,17 @@ Notes that matter in practice:
   need proof the test actually ran for the RED/GREEN gate.
 - **Go watch mode**: there is no native watch. Rerun `<test-one>` on the narrow package;
   it is fast enough that a watcher is not worth adding.
-- **backend watch mode**: `npm run test:watch -- --maxWorkers=2`. A watcher holds
+- **backend watch mode**: `<jest> --watch --maxWorkers=2`. A watcher holds
   its workers alive between runs, so leaving one running costs the machine for as
   long as the session lasts. Close it when you stop iterating.
 - **backend narrow runs**: the repo already ships focused scripts, for example
   `npm run test:leaderboard-strategies` and `npm run test:leaderboard-integration`.
-  Use an existing script when one matches, rather than a new ad-hoc invocation.
+  They are worth reading for the glob they name, but they run the repo's typechecking
+  config. Pass that glob to `<test-one>` instead.
+- **Compile-time RED in TypeScript** (Step 3) no longer comes from the test run, because
+  `<jest>` does not typecheck. A test that calls a function that does not exist yet fails
+  at runtime instead (`is not a function`, `undefined`), which is valid runtime RED. If
+  the type error itself is the RED you mean to show, take it from `<build>`.
 - **A change spanning two services** must satisfy the gate in each service separately.
   Two repos means two RED runs and two GREEN runs.
 
@@ -202,7 +226,30 @@ does not shrink to compensate.
   responsive finishes sooner than an uncapped one that makes it swap.
 - **`--workerIdleMemoryLimit=512MB` restarts a worker that grows past it.** ts-jest
   accumulates across a long suite, so without it two workers can end up costing
-  more than eleven short-lived ones.
+  more than eleven short-lived ones. That limit is also why `<jest>` exists (see below).
+
+#### Why transpile-only
+
+Measured on `backend` 2026-09-25: 112 suites, cold cache, 2 workers, 12-core laptop.
+
+| Config | Full suite | One heavy file | Worker memory |
+|---|---|---|---|
+| repo default (`npm test`) | 696.8s | 15.7s | 1.6-2.8 GB |
+| `<jest>` | 36.6s | 2.6s | 0.2-0.8 GB, peaks near 1.5 |
+
+Both runs had the same results: 972 passed, the same 2 failed, 29 todo.
+
+By default ts-jest typechecks every file it compiles. A worker doing that passes 512 MB
+within its first test file, so the memory limit recycles it after every file, and each
+new worker rebuilds the TypeScript program from scratch. That pairing, not the test
+count, is what made the suite take eleven minutes. Every new space starts with a cold
+cache, because jest keys its cache by absolute path. So none of that cost is paid only
+once.
+
+Turning the limit off is not the fix. Two workers at 2-3 GB each, multiplied by
+concurrent sessions, is the swap described above. Turning the typecheck off is, because
+`<build>` already runs it once over the same files, tests included (`tsconfig.json`
+includes `src/**/*`).
 - **Raising a cap for a single run is fine** when you know the machine is otherwise
   idle. Do it on the command line for that run; do not edit the matrix, and do not
   carry the raised value into the next command.
@@ -348,15 +395,47 @@ do not refactor past what the tests justify.
 
 ### Step 7: Verify the Whole Repo
 
+Cheapest signal first, and the whole suite exactly once:
+
 ```bash
-<build>      # compile / typecheck must be clean
-<test>       # full suite for the service you changed
-<coverage>   # coverage on the packages you touched
+<build>          # compile / typecheck must be clean
+<test-changed>   # every test the change can reach, with coverage on the changed files
+<test>           # full suite for the service you changed - once, in the background
+<coverage>       # only where the matrix gives a separate command (Go)
 ```
 
-Both must be green before the task is reportable. If a pre-existing failure is present on
-the base branch, say so explicitly and show that it is unrelated to your change - do not
-quietly absorb it.
+`<build>` and `<test-changed>` run in the foreground: a failure there is almost certainly
+yours, and it is cheap to see. Once both are green, start `<test>` with the Bash tool's
+`run_in_background`, send its output to a file in the scratchpad, and do Step 7b while it
+runs. You are notified when it exits. Then read the summary and `FAIL` lines, not the
+whole log.
+
+All of them must be green before the task is reportable. If a pre-existing failure is
+present on the base branch, say so explicitly and show that it is unrelated to your
+change - do not quietly absorb it.
+
+**Attribute a failure from the import graph. Do not rerun the suite at `<base>`.** List
+the tests the change can reach:
+
+```bash
+<jest> --listTests --changedSince=<base>
+```
+
+- **A failing test outside that list** imports nothing that differs from `<base>`, so it
+  fails the same way there by construction. Report it as pre-existing, name it, and cite
+  its absence from the list as the evidence. Running it at `<base>` would prove nothing
+  more and costs a second suite.
+- **A failing test inside the list** is yours until shown otherwise. Read the assertion
+  and `git diff <base> -- <the files it imports>`. If you can neither tie it to the change
+  nor clear it, say so at the gate rather than guess.
+- **The argument breaks** when the diff touches something every test reads outside the
+  import graph: `jest.config.js`, a `setupFiles`/`setupFilesAfterEnv` file,
+  `package.json` or the lockfile, `tsconfig.json`, or a fixture read from disk. Then every
+  test is in scope, and each failure needs the inside-the-list treatment.
+
+In Go the same reasoning uses `go list -deps -test <pkg>`: a failing package whose
+dependencies, its test files included, hold no changed package fails at `<base>` too.
+`testdata/` read from disk is the same exception as a fixture.
 
 Do not run a linter or formatter as part of this step in `backend`.
 

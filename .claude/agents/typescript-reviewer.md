@@ -125,6 +125,11 @@ vitest run                          # Tests (Vitest)
 jest --ci                           # Tests (Jest)
 ```
 
+In this workspace, do not run the test suite. The implementing session has already
+run it, and the caller's evidence report (`testing.md`) records the result. A full run
+here would be a second copy, uncapped, alongside other sessions. To check one behavior,
+run that one file with the command the evidence report quotes.
+
 ## Approval Criteria
 
 - **Approve**: No CRITICAL or HIGH issues

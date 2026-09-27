@@ -334,7 +334,8 @@ Now run straight through. No further permission prompts; Gate 1 covered all of t
    one line and review without it; the graph helps the review and never blocks it.
 
    Then dispatch by language, giving each reviewer the working directory, the base commit
-   from the PRD, that repo's `review` block, and the path to its `AGENTS.md` if it has
+   from the PRD, that repo's `review` block, the evidence report path (so it reads the
+   suite's result instead of rerunning it), and the path to its `AGENTS.md` if it has
    one — a reviewer applying a skill's convention over the repo's own rule files a
    finding the team will reject. Tell reviewers they can ask the graph
    who calls a function with `.claude/scripts/graph.sh run <task>/<repo> query callers_of <name>`:
