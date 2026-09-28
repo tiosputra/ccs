@@ -316,8 +316,8 @@ What passes:
   reference-only.
 - **A reference alias is matched as a whole path segment.** With
   `REFERENCE_REPOS=mobile`, `spaces/t/mobile-app/…` is writable and so is
-  `spaces/t/api/src/mobile/…`; only `spaces/t/mobile` and what is under it
-  is sealed. A task literally named `mobile` — `spaces/mobile/api/…` — is
+  `spaces/t/<repo>/src/mobile/…`; only `spaces/t/mobile` and what is under it
+  is sealed. A task literally named `mobile` — `spaces/mobile/<repo>/…` — is
   unaffected, because the alias is matched in the repo position, not the task
   position.
 

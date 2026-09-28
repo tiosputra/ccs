@@ -271,6 +271,8 @@ start_space_repo() {
   fi
   fail "$repo  worktree add failed"
   git -C "$dir" worktree add "${add_args[@]}" 2>&1 | sed 's/^/      /' >&2 || true
+  # A space whose first worktree failed must not linger as an empty directory.
+  rmdir "$SPACES_DIR/$task" 2>/dev/null || true
   return 1
 }
 
