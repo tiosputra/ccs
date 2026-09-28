@@ -19,6 +19,7 @@
 #   graph.sh run <target> <query> [args...]  one read-only code-review-graph query
 #   graph.sh drop <task> [repo]              delete a space's graphs (space.sh remove calls this)
 #   graph.sh prune                           delete graphs whose space no longer exists
+#   graph.sh mcp                             rewrite .mcp.json from the checkouts that have a graph
 #   graph.sh slash <args...>                 dispatcher for the /graph command
 #
 # <target> is <repo> for repos/<repo>, or <task>/<repo> for a space worktree.
@@ -28,10 +29,14 @@
 # kind is repo or space. state is fresh, stale (code, uncommitted work or
 # .code-review-graphignore changed since the build), missing, or orphan.
 #
-# Writes only under .code-review-graph/. Never writes to a repo, a worktree, or
-# a git index: builds read a scratch copy of the index in which untracked files
-# are marked intent-to-add, so work not yet committed is in the graph, and
-# the .code-review-graphignore paths are removed.
+# .mcp.json is per machine and gitignored: every build rewrites it with one
+# read-only server per repos/ checkout that has a graph, so it names only the
+# services cloned here.
+#
+# Writes only under .code-review-graph/ and to .mcp.json. Never writes to a
+# repo, a worktree, or a git index: builds read a scratch copy of the index in
+# which untracked files are marked intent-to-add, so work not yet committed is
+# in the graph, and the .code-review-graphignore paths are removed.
 
 # No `set -e`: status is a report, and build checks each step itself so a
 # failed build can leave the previous graph in place.
@@ -43,6 +48,7 @@ REPOS_DIR="$ROOT/repos"
 SPACES_DIR="$ROOT/spaces"
 GRAPHS="$ROOT/.code-review-graph"
 IGNORE_FILE="$ROOT/.code-review-graphignore"
+MCP_FILE="$ROOT/.mcp.json"
 CRG=code-review-graph
 
 # The tool keeps a registry and caches under $CRG_HOME; keep those here too.
@@ -52,7 +58,7 @@ export CRG_HOME="$GRAPHS/home"
 # install, watch, serve, embed - or wants the default data dir inside the repo.
 READ_ONLY_QUERIES="query impact search detect-changes flows flow communities community architecture large-functions dead-code status"
 
-usage() { sed -n '3,34p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '3,39p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 die()   { printf 'error\t%s\n' "$*" >&2; exit 1; }
 rel()   { printf '%s\n' "${1#"$ROOT"/}"; }
 
@@ -264,7 +270,39 @@ cmd_build() {
   else
     build_one "$1" || failed=1
   fi
+  write_mcp
   [ "$failed" -eq 0 ]
+}
+
+# ---------------------------------------------------------------------- mcp --
+
+# The six tools that only read. A server started without this list also offers
+# build and update, which would write a graph into the checkout.
+MCP_TOOLS="query_graph_tool,get_impact_radius_tool,get_review_context_tool,semantic_search_nodes_tool,get_affected_flows_tool,list_graph_stats_tool"
+
+# Rewrite .mcp.json: one server per repos/ checkout that has a built graph, and
+# nothing else. A space is not served - it is a different working tree.
+# Claude Code reads the file at startup, so a new server needs a restart.
+write_mcp() {
+  local t sep="" n=0 tmp="$MCP_FILE.$$"
+  {
+    printf '{\n  "mcpServers": {'
+    for t in $(repo_names); do
+      [ -f "$GRAPHS/repos/$t/built.tsv" ] || continue
+      printf '%s\n    "graph-%s": {\n' "$sep" "$t"
+      printf '      "command": "%s",\n' "$CRG"
+      printf '      "args": ["mcp", "--repo", "repos/%s"],\n' "$t"
+      printf '      "env": {\n'
+      printf '        "CRG_DATA_DIR": "%s",\n' "$(rel "$GRAPHS/repos/$t")"
+      printf '        "CRG_HOME": "%s",\n' "$(rel "$CRG_HOME")"
+      printf '        "CRG_TOOLS": "%s"\n' "$MCP_TOOLS"
+      printf '      }\n    }'
+      sep=","; n=$((n + 1))
+    done
+    [ "$n" -gt 0 ] && printf '\n  '
+    printf '}\n}\n'
+  } > "$tmp" && mv "$tmp" "$MCP_FILE" || { rm -f "$tmp"; printf 'error\tcould not write %s\n' "$(rel "$MCP_FILE")"; return 1; }
+  printf 'mcp\t%s\t%s server(s)\n' "$(rel "$MCP_FILE")" "$n"
 }
 
 # ------------------------------------------------------------------- status --
@@ -455,6 +493,7 @@ case "${1:-}" in
   run)    shift; cmd_run "$@" ;;
   drop)   shift; cmd_drop "$@" ;;
   prune)  shift; cmd_prune ;;
+  mcp)    shift; write_mcp ;;
   slash)  shift; cmd_slash ${1+"$@"} ;;
   ""|-h|--help|help) usage ;;
   *) usage; exit 2 ;;

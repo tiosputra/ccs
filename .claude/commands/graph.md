@@ -119,12 +119,13 @@ orphans only come from a space removed by hand.
 
 ## The MCP servers
 
-`.mcp.json` at the workspace root registers one read-only server per
-canonical checkout for `backend`, `payment`, `player` and `sport`, so the graph
-can be queried as a tool instead of through `run`. Each one is pinned by
-`CRG_DATA_DIR` to the same graph `graph.sh` builds, and `CRG_TOOLS` trims the
-tool list from 30 to 6 — none of which write, so a server cannot build a graph
-into a checkout.
+`.mcp.json` at the workspace root is per machine and gitignored. Every build
+rewrites it with one read-only server per `repos/<repo>` checkout that has a
+graph, so it names only the services cloned here, and a fresh clone of the
+workspace asks you to approve nothing. `graph.sh mcp` rewrites it without
+building. Each server is pinned by `CRG_DATA_DIR` to the same graph `graph.sh`
+builds, and `CRG_TOOLS` trims the tool list from 30 to 6 — none of which
+write, so a server cannot build a graph into a checkout.
 
 What that means in practice:
 
@@ -133,8 +134,8 @@ What that means in practice:
 - They read whatever `graph.sh` last built. A server has no way to refresh
   itself, so if `status` says `stale`, run `/graph build <repo>` — the running
   server picks up the rebuilt database on its next call.
-- A new checkout is not registered until someone adds it to `.mcp.json`, and
-  Claude Code only reads that file at startup.
+- A checkout gets a server on its first build, but Claude Code only reads
+  `.mcp.json` at startup, so the new server appears in the next session.
 
 ## mode: error
 
@@ -150,7 +151,7 @@ Relay the message. It names what exists. Do not guess another target.
   eight instruction files including an append to that repo's `CLAUDE.md`, and a
   `.gitignore` edit — plus a `PostToolUse` hook that rebuilds the graph bare,
   back inside the checkout. The MCP servers this workspace does use are written
-  by hand in the tracked `.mcp.json` at the root.
+  by `graph.sh` into the gitignored `.mcp.json` at the root.
 - **Treating the graph as the code.** It is a parse, and dynamic dispatch,
   framework wiring and reflection are invisible to it. Confirm a surprising
   "no callers" by searching before acting on it.

@@ -205,10 +205,10 @@ typing during a task. `/space remove` drops a space's graphs along with it.
 Builds leave out generated code, migrations and vendored packages, listed in
 the tracked `.code-review-graphignore`.
 
-The tracked `.mcp.json` also registers `backend`, `payment`, `player` and
-`sport` as read-only MCP servers, so the graph of a checkout can be queried as
-a tool. They serve `repos/<repo>` from the graph `graph.sh` built, and expose
-only the six tools that read. Build the graphs before they are any use:
+Every build also rewrites `.mcp.json`, which is gitignored: one read-only MCP
+server per checkout that has a graph, so the graph can be queried as a tool.
+Each serves `repos/<repo>` from the graph `graph.sh` built and exposes only the
+six tools that read. Nothing is registered until something is built:
 
 ```
 /graph build all
