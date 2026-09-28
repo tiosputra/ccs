@@ -2,7 +2,7 @@
 name: logging
 description: Use when writing or changing service code that can fail, talks to something outside the process, or changes state - a handler, usecase, repository call, job, queue consumer, webhook callback, or external API call - so it logs through the repo's existing logger, carries the request ID, picks the right level, and leaks no secrets. Also use when reviewing code for missing or noisy logs.
 metadata:
-  origin: swing
+  origin: workspace
   learns: true
   fingerprint:
     - lines go.mod (go.uber.org/zap|rs/zerolog|sirupsen/logrus|lumberjack|apex/log|go-kit/log)
@@ -17,8 +17,8 @@ facts about one repo, so they live in its learned file, not here.
 
 ## Load the repo's facts first
 
-The repo is the checkout being changed: `spaces/<task>/<repo>/` means `<repo>`.
-A project with no `repos/` is one repo, named after its directory.
+The repo is the name of the working directory being changed. A project with no
+repos of its own is one repo, named after its directory.
 
 Start with the repo's own `AGENTS.md`, if it has one — the team's rules, committed
 beside the code. Then the learned file:

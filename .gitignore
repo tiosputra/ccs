@@ -12,10 +12,14 @@
 /repos/*
 !/repos/README.md
 
-# Task worktrees, created by .claude/scripts/space.sh and torn down at the end
-# of a task. Every file inside belongs to a service repo, not to this one.
+# Task worktrees for tasks started with --space, created by .claude/scripts/task.sh
+# and removed when the task finishes. Every file inside belongs to a service repo.
 /spaces/*
 !/spaces/README.md
+
+# Which tasks are open on this machine: isolation, branch, and each repo's base.
+# Written by task.sh, read through tasklib.sh; see tasklib.sh for the format.
+/.claude/state/
 
 # ----------------------------------------------------------------- task docs --
 # One directory per task - prd.md, plan.md, log.md, testing.md. They narrate real
@@ -50,3 +54,7 @@
 .env
 # code-review-graph data - rebuilt from the code on demand by .claude/scripts/graph.sh.
 /.code-review-graph/
+
+# MCP servers for this machine's checkouts - graph.sh rewrites it on every build,
+# so it names only the services cloned here.
+/.mcp.json

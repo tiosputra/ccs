@@ -35,6 +35,7 @@ ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CLAUDE_DIR="$ROOT/.claude"
 LEARNED="$CLAUDE_DIR/learned"
 . "$SCRIPT_DIR/config.sh"
+. "$SCRIPT_DIR/tasklib.sh"
 cfg_resolve REFERENCE_REPOS ""
 
 usage() { sed -n '3,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
@@ -43,7 +44,7 @@ rel()   { printf '%s\n' "${1#"$ROOT"/}"; }
 
 # ------------------------------------------------------------------- repos --
 
-# The same rule as space.sh: a comma list of aliases, whitespace ignored.
+# The same rule as task.sh: a comma list of aliases, whitespace ignored.
 is_reference_repo() {
   case ",${REFERENCE_REPOS//[[:space:]]/}," in *",$1,"*) return 0 ;; esac
   return 1
@@ -101,6 +102,28 @@ fm_list() {
 skill_file()   { printf '%s\n' "$CLAUDE_DIR/skills/$1/SKILL.md"; }
 learned_file() { printf '%s\n' "$LEARNED/$2/$1.md"; }            # <skill> <repo>
 
+# A skill that describes a repo rather than code written in it - which app
+# routes a link, how a service ships - may learn reference-only repos too.
+# It says so with `learns-reference: true`.
+skill_learns_reference() {
+  frontmatter "$(skill_file "$1")" 2>/dev/null \
+    | grep -qE '^[[:space:]]*learns-reference:[[:space:]]*true[[:space:]]*$'
+}
+
+# The repos a skill learns about: the workable ones, plus the reference-only
+# ones when the skill asks for them.
+skill_repos() {
+  local d n
+  repo_names
+  skill_learns_reference "$1" || return 0
+  has_checkouts || return 0
+  for d in "$ROOT"/repos/*/; do
+    [ -e "$d/.git" ] || continue
+    n="$(basename "$d")"
+    is_reference_repo "$n" && printf '%s\n' "$n"
+  done
+}
+
 skill_learns() {
   frontmatter "$(skill_file "$1")" 2>/dev/null \
     | grep -qE '^[[:space:]]*learns:[[:space:]]*true[[:space:]]*$'
@@ -121,11 +144,11 @@ pair_problem() {
   skill_learns "$skill" || { echo "'$skill' does not learn - its frontmatter has no 'learns: true'"; return 0; }
   [ -f "$CLAUDE_DIR/skills/$skill/discover.md" ] \
     || { echo "'$skill' learns but has no discover.md - nothing says what to look for"; return 0; }
-  if is_reference_repo "$repo"; then
+  if is_reference_repo "$repo" && ! skill_learns_reference "$skill"; then
     echo "'$repo' is reference-only - nobody writes code there, so there is nothing to learn for"; return 0
   fi
   [ -n "$(repo_dir "$repo")" ] \
-    || { echo "no workable repo named '$repo' - workable: $(repo_names | tr '\n' ' ')"; return 0; }
+    || { echo "no repo named '$repo' for $skill - it learns: $(skill_repos "$skill" | tr '\n' ' ')"; return 0; }
   return 1
 }
 
@@ -135,25 +158,66 @@ digest() {
   if command -v shasum >/dev/null 2>&1; then shasum -a 1; else sha1sum; fi | cut -c1-12
 }
 
+# The commit a repo's watched content is read at. Normally HEAD - no one works in
+# repos/ outside a task, so HEAD is what was cloned. While an in-place task holds
+# the checkout, HEAD is the task branch with its unmerged work, so the task's
+# base commit is used instead: a learned file describes the repo, not the task
+# in flight, and must not go stale because of it.
+fingerprint_ref() {
+  local repo="$1" dir="$2" t base
+  git -C "$dir" rev-parse --git-dir >/dev/null 2>&1 || return 1
+  if t="$(task_holding "$repo")" && base="$(task_base "$t" "$repo")"; then
+    printf '%s\n' "${base#*	}"
+  else
+    printf '%s\n' HEAD
+  fi
+}
+
+# The files under <dir> at <ref> whose name matches <glob>, one repo-relative
+# path per line, skipping the same dependency directories as the tree walk.
+ref_files() {
+  local dir="$1" ref="$2" glob="$3" f
+  git -C "$dir" ls-tree -r --name-only "$ref" 2>/dev/null | while read -r f; do
+    case "/$f/" in */node_modules/*|*/vendor/*|*/dist/*|*/.next/*) continue ;; esac
+    # shellcheck disable=SC2254 - the glob is meant to match
+    case "${f##*/}" in $glob) printf '%s\n' "$f" ;; esac
+  done | LC_ALL=C sort
+}
+
 # The watched content of one repo, hashed. The entries go into the hash too, so
-# editing a watch list makes the file stale until it is re-stamped.
+# editing a watch list makes the file stale until it is re-stamped. Content is
+# read from fingerprint_ref, never the working tree, so neither a task's
+# uncommitted work nor its branch changes the answer. A directory that is not a
+# git repo is read as it stands.
 fingerprint() {
-  local skill="$1" repo="$2" dir kind arg rest f
+  local skill="$1" repo="$2" dir ref kind arg rest f
   dir="$(repo_dir "$repo")"
   [ -n "$dir" ] || return 1
+  ref="$(fingerprint_ref "$repo" "$dir")" || ref=""
   { fm_list "$(skill_file "$skill")" fingerprint
     fm_list "$(learned_file "$skill" "$repo")" watch 2>/dev/null
   } | while read -r kind arg rest; do
         printf '== %s %s %s\n' "$kind" "$arg" "$rest"
         case "$kind" in
           lines)
-            if [ -f "$dir/$arg" ]; then grep -E -- "$rest" "$dir/$arg"; else echo "(absent)"; fi ;;
+            if [ -n "$ref" ]; then
+              if git -C "$dir" cat-file -e "$ref:$arg" 2>/dev/null; then
+                git -C "$dir" show "$ref:$arg" | grep -E -- "$rest"
+              else echo "(absent)"; fi
+            elif [ -f "$dir/$arg" ]; then grep -E -- "$rest" "$dir/$arg"; else echo "(absent)"; fi ;;
           files)
-            find "$dir" \( -name node_modules -o -name vendor -o -name .git -o -name dist -o -name .next \) \
-                 -prune -o -type f -name "$arg" -print | LC_ALL=C sort | while read -r f; do
-              printf -- '-- %s\n' "${f#"$dir"/}"
-              cat "$f"
-            done ;;
+            if [ -n "$ref" ]; then
+              ref_files "$dir" "$ref" "$arg" | while read -r f; do
+                printf -- '-- %s\n' "$f"
+                git -C "$dir" show "$ref:$f"
+              done
+            else
+              find "$dir" \( -name node_modules -o -name vendor -o -name .git -o -name dist -o -name .next \) \
+                   -prune -o -type f -name "$arg" -print | LC_ALL=C sort | while read -r f; do
+                printf -- '-- %s\n' "${f#"$dir"/}"
+                cat "$f"
+              done
+            fi ;;
           *) echo "(unknown entry kind: $kind)" ;;
         esac
       done | digest
@@ -186,7 +250,7 @@ cmd_status() {
     || die "'$only' is not a skill that learns (no 'learns: true' in its frontmatter)"
   for skill in $(learning_skills); do
     [ -z "$only" ] || [ "$skill" = "$only" ] || continue
-    for repo in $(repo_names); do status_row "$skill" "$repo"; done
+    for repo in $(skill_repos "$skill"); do status_row "$skill" "$repo"; done
   done
 }
 
@@ -234,6 +298,13 @@ cmd_slash() {
   printf 'skill\t%s\n'        "$skill"
   printf 'repo\t%s\n'         "$repo"
   printf 'repo_dir\t%s\n'     "$(rel "$(repo_dir "$repo")")"
+  # An in-place task has the checkout on its branch; the scan must describe the
+  # repo, not that task's unmerged work.
+  local held base
+  if held="$(task_holding "$repo")"; then
+    base="$(task_base "$held" "$repo")"
+    printf 'held\t%s\t%s\n' "$held" "${base#*	}"
+  fi
   printf 'discover\t%s\n'     "$(rel "$CLAUDE_DIR/skills/$skill/discover.md")"
   printf 'learned_file\t%s\n' "$(rel "$(learned_file "$skill" "$repo")")"
   status_row "$skill" "$repo"

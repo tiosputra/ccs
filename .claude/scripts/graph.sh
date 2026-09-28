@@ -1,37 +1,45 @@
 #!/usr/bin/env bash
 #
-# graph.sh - code-review-graph for every checkout and space, kept outside them.
+# graph.sh - code-review-graph for every checkout and task, kept outside them.
 #
 # code-review-graph parses a repo into a call/import graph that answers "what
 # does this change touch" without reading the whole codebase. Left alone it
 # writes .code-review-graph/ into the repo it reads, which is a write into
-# repos/ or noise in a space's pull request. This script keeps every graph at
-# the workspace root instead, laid out like the workspace:
+# repos/ or noise in a task's pull request. This script keeps every graph at
+# the workspace root instead:
 #
 #   .code-review-graph/repos/<repo>/          graph of repos/<repo>
-#   .code-review-graph/spaces/<task>/<repo>/  graph of spaces/<task>/<repo>
+#   .code-review-graph/tasks/<task>/<repo>/   graph of the task's working directory
+#                                             for <repo>, wherever task.sh puts it
 #
 # Usage:
-#   graph.sh status                          every checkout, space and orphaned graph
+#   graph.sh status                          every checkout, task and orphaned graph
 #   graph.sh build <target>|all              full rebuild; `all` is every repos/ checkout
 #   graph.sh review <task>[/<repo>] [--base <ref>]
 #                                            rebuild if stale, then the blast radius vs base
 #   graph.sh run <target> <query> [args...]  one read-only code-review-graph query
-#   graph.sh drop <task> [repo]              delete a space's graphs (space.sh remove calls this)
-#   graph.sh prune                           delete graphs whose space no longer exists
+#   graph.sh drop <task> [repo]              delete a task's graphs (task.sh finish calls this)
+#   graph.sh prune                           delete graphs whose task no longer holds that repo
+#   graph.sh mcp                             rewrite .mcp.json from the checkouts that have a graph
 #   graph.sh slash <args...>                 dispatcher for the /graph command
 #
-# <target> is <repo> for repos/<repo>, or <task>/<repo> for a space worktree.
+# <target> is <repo> for repos/<repo>, or <task>/<repo> for that repo's working
+# directory in a task - repos/<repo> for an in-place task, a worktree for a space.
 #
 # status rows:
 #   graph<TAB>target<TAB>kind<TAB>state<TAB>built<TAB>files<TAB>nodes
-# kind is repo or space. state is fresh, stale (code, uncommitted work or
-# .code-review-graphignore changed since the build), missing, or orphan.
+# kind is repo or task. state is fresh, stale (code, uncommitted work or
+# .code-review-graphignore changed since the build), missing, orphan, or held -
+# a repo an in-place task has on its branch, whose graph is left as last built.
 #
-# Writes only under .code-review-graph/. Never writes to a repo, a worktree, or
-# a git index: builds read a scratch copy of the index in which untracked files
-# are marked intent-to-add, so work not yet committed is in the graph, and
-# the .code-review-graphignore paths are removed.
+# .mcp.json is per machine and gitignored: every build rewrites it with one
+# read-only server per repos/ checkout that has a graph, so it names only the
+# services cloned here.
+#
+# Writes only under .code-review-graph/ and to .mcp.json. Never writes to a
+# repo, a worktree, or a git index: builds read a scratch copy of the index in
+# which untracked files are marked intent-to-add, so work not yet committed is
+# in the graph, and the .code-review-graphignore paths are removed.
 
 # No `set -e`: status is a report, and build checks each step itself so a
 # failed build can leave the previous graph in place.
@@ -40,9 +48,10 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REPOS_DIR="$ROOT/repos"
-SPACES_DIR="$ROOT/spaces"
+. "$SCRIPT_DIR/tasklib.sh"
 GRAPHS="$ROOT/.code-review-graph"
 IGNORE_FILE="$ROOT/.code-review-graphignore"
+MCP_FILE="$ROOT/.mcp.json"
 CRG=code-review-graph
 
 # The tool keeps a registry and caches under $CRG_HOME; keep those here too.
@@ -52,7 +61,7 @@ export CRG_HOME="$GRAPHS/home"
 # install, watch, serve, embed - or wants the default data dir inside the repo.
 READ_ONLY_QUERIES="query impact search detect-changes flows flow communities community architecture large-functions dead-code status"
 
-usage() { sed -n '3,34p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '3,39p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 die()   { printf 'error\t%s\n' "$*" >&2; exit 1; }
 rel()   { printf '%s\n' "${1#"$ROOT"/}"; }
 
@@ -83,16 +92,24 @@ resolve() {
   case "$t" in
     ""|*..*|/*|*/*/*) RESOLVE_ERR="'$1' is not a target - use <repo> or <task>/<repo>"; return 1 ;;
     */*)
-      if [ ! -e "$SPACES_DIR/$t/.git" ]; then
-        RESOLVE_ERR="no space worktree at spaces/$t - /space list shows what exists"; return 1
+      local task="${t%%/*}" repo="${t#*/}" dir
+      if ! task_exists "$task"; then
+        RESOLVE_ERR="no open task named '$task' - /task list shows what exists"; return 1
       fi
-      T_KIND=space T_DIR="$SPACES_DIR/$t" T_DATA="$GRAPHS/spaces/$t" ;;
+      if ! task_has_repo "$task" "$repo"; then
+        RESOLVE_ERR="'$repo' is not in task '$task' - it has: $(task_repos "$task" | paste -sd, -)"; return 1
+      fi
+      dir="$(task_workdir "$task" "$repo")"
+      if [ ! -e "$dir/.git" ]; then
+        RESOLVE_ERR="task '$task' has no checkout for $repo at $(rel "$dir")"; return 1
+      fi
+      T_KIND=task T_DIR="$dir" T_DATA="$GRAPHS/tasks/$t" ;;
     *)
       if [ ! -e "$REPOS_DIR/$t/.git" ]; then
-        if [ -d "$SPACES_DIR/$t" ]; then
+        if task_exists "$t"; then
           RESOLVE_ERR="'$t' is a task, not a repo - name one of its repos: $t/<repo>"
         else
-          RESOLVE_ERR="no checkout at repos/$t - /space repos lists them"
+          RESOLVE_ERR="no checkout at repos/$t - /task repos lists them"
         fi
         return 1
       fi
@@ -109,18 +126,16 @@ repo_names() {
 }
 
 # Worktrees of one task, as <task>/<repo>.
-space_targets() {
-  local d
-  for d in "$SPACES_DIR/$1"/*/; do
-    [ -e "$d/.git" ] && printf '%s/%s\n' "$1" "$(basename "$d")"
+task_targets() {
+  local r
+  for r in $(task_repos "$1"); do
+    [ -e "$(task_workdir "$1" "$r")/.git" ] && printf '%s/%s\n' "$1" "$r"
   done
 }
 
-all_space_targets() {
-  local d
-  for d in "$SPACES_DIR"/*/; do
-    [ -d "$d" ] && space_targets "$(basename "$d")"
-  done
+all_task_targets() {
+  local t
+  for t in $(task_names); do task_targets "$t"; done
 }
 
 # ------------------------------------------------------------------- index --
@@ -222,6 +237,14 @@ json_int()    { sed -n "s/.*\"$1\": \([0-9][0-9]*\).*/\1/p"; }
 build_one() {
   local fp="${2:-}" label="${3:-built}" tmp log json
   resolve "$1" || { printf 'error\t%s\n' "$RESOLVE_ERR"; return 1; }
+  # repos/<repo> held by an in-place task is on that task's branch. Its graph is
+  # the repo's, served over MCP, so it is not rebuilt from someone's unmerged
+  # work; the task's own graph is <task>/<repo>.
+  local held
+  if [ "$T_KIND" = repo ] && held="$(task_holding "$T_NAME")"; then
+    printf 'held\t%s\ton task %s - kept as last built; the task graph is %s/%s\n' "$T_NAME" "$held" "$held" "$T_NAME"
+    return 0
+  fi
   [ -n "$fp" ] || fp="$(fingerprint "$T_DIR")"
   mkdir -p "$(dirname "$T_DATA")" || return 1
   tmp="$T_DATA.building.$$"
@@ -264,7 +287,39 @@ cmd_build() {
   else
     build_one "$1" || failed=1
   fi
+  write_mcp
   [ "$failed" -eq 0 ]
+}
+
+# ---------------------------------------------------------------------- mcp --
+
+# The six tools that only read. A server started without this list also offers
+# build and update, which would write a graph into the checkout.
+MCP_TOOLS="query_graph_tool,get_impact_radius_tool,get_review_context_tool,semantic_search_nodes_tool,get_affected_flows_tool,list_graph_stats_tool"
+
+# Rewrite .mcp.json: one server per repos/ checkout that has a built graph, and
+# nothing else. A task's graph is not served - its working directory changes under it.
+# Claude Code reads the file at startup, so a new server needs a restart.
+write_mcp() {
+  local t sep="" n=0 tmp="$MCP_FILE.$$"
+  {
+    printf '{\n  "mcpServers": {'
+    for t in $(repo_names); do
+      [ -f "$GRAPHS/repos/$t/built.tsv" ] || continue
+      printf '%s\n    "graph-%s": {\n' "$sep" "$t"
+      printf '      "command": "%s",\n' "$CRG"
+      printf '      "args": ["mcp", "--repo", "repos/%s"],\n' "$t"
+      printf '      "env": {\n'
+      printf '        "CRG_DATA_DIR": "%s",\n' "$(rel "$GRAPHS/repos/$t")"
+      printf '        "CRG_HOME": "%s",\n' "$(rel "$CRG_HOME")"
+      printf '        "CRG_TOOLS": "%s"\n' "$MCP_TOOLS"
+      printf '      }\n    }'
+      sep=","; n=$((n + 1))
+    done
+    [ "$n" -gt 0 ] && printf '\n  '
+    printf '}\n}\n'
+  } > "$tmp" && mv "$tmp" "$MCP_FILE" || { rm -f "$tmp"; printf 'error\tcould not write %s\n' "$(rel "$MCP_FILE")"; return 1; }
+  printf 'mcp\t%s\t%s server(s)\n' "$(rel "$MCP_FILE")" "$n"
 }
 
 # ------------------------------------------------------------------- status --
@@ -275,6 +330,7 @@ status_row() {
   files="$(stamp_value "$data" files)"; [ -n "$files" ] || files=-
   nodes="$(stamp_value "$data" nodes)"; [ -n "$nodes" ] || nodes=-
   if [ ! -e "$dir/.git" ]; then state=orphan
+  elif [ "$kind" = repo ] && task_holding "$target" >/dev/null; then state=held
   elif [ ! -f "$data/built.tsv" ]; then state=missing
   elif [ "$(stamp_value "$data" fingerprint)" = "$(fingerprint "$dir")" ]; then state=fresh
   else state=stale
@@ -282,15 +338,24 @@ status_row() {
   printf 'graph\t%s\t%s\t%s\t%s\t%s\t%s\n' "$target" "$kind" "$state" "$built" "$files" "$nodes"
 }
 
-# Graph dirs whose worktree is gone, as <task>/<repo>.
+# Graph dirs no open task holds, as <task>/<repo>. Graphs under the older
+# .code-review-graph/spaces/ layout are always orphans: nothing builds there now.
 orphan_targets() {
   local d t
-  [ -d "$GRAPHS/spaces" ] || return 0
+  for d in "$GRAPHS"/tasks/*/*/; do
+    [ -f "$d/built.tsv" ] || continue
+    t="${d%/}"; t="${t#"$GRAPHS"/tasks/}"
+    task_has_repo "${t%%/*}" "${t#*/}" 2>/dev/null || printf '%s\n' "$t"
+  done
   for d in "$GRAPHS"/spaces/*/*/; do
     [ -f "$d/built.tsv" ] || continue
-    t="${d%/}"; t="${t#"$GRAPHS"/spaces/}"
-    [ -e "$SPACES_DIR/$t/.git" ] || printf '%s\n' "$t"
+    t="${d%/}"; printf '%s\n' "${t#"$GRAPHS"/spaces/}"
   done
+}
+
+# The data dir of an orphan: under tasks/, or the older spaces/ layout.
+orphan_data() {
+  if [ -d "$GRAPHS/tasks/$1" ]; then printf '%s\n' "$GRAPHS/tasks/$1"; else printf '%s\n' "$GRAPHS/spaces/$1"; fi
 }
 
 cmd_status() {
@@ -298,14 +363,14 @@ cmd_status() {
   if crg_installed; then printf 'installed\t%s\n' "$(crg_version)"; else printf 'installed\tno\tpipx install code-review-graph\n'; fi
   printf 'ignore_file\t%s\n' "$(rel "$IGNORE_FILE")"
   for t in $(repo_names);         do status_row "$t" repo  "$REPOS_DIR/$t"  "$GRAPHS/repos/$t"; done
-  for t in $(all_space_targets);  do status_row "$t" space "$SPACES_DIR/$t" "$GRAPHS/spaces/$t"; done
-  for t in $(orphan_targets);     do status_row "$t" space "$SPACES_DIR/$t" "$GRAPHS/spaces/$t"; done
+  for t in $(all_task_targets);   do status_row "$t" task  "$(task_workdir "${t%%/*}" "${t#*/}")" "$GRAPHS/tasks/$t"; done
+  for t in $(orphan_targets);     do status_row "$t" task  "$GRAPHS/.none" "$(orphan_data "$t")"; done
 }
 
 # ------------------------------------------------------------------- review --
 
-# The commit a space's repo is compared against: the merge-base with the ref
-# the space was created from, so a rebase onto a newer base does not drag the
+# The commit a task's repo is compared against: the merge-base with the ref
+# the task started from, so a rebase onto a newer base does not drag the
 # base's own commits into the review. Prints "<sha><TAB><ref><TAB><how>".
 review_base() {
   local task="$1" repo="$2" dir="$3" given="$4" ref sha mb
@@ -314,21 +379,23 @@ review_base() {
       || { echo "cannot find a merge-base between HEAD and '$given'"; return 1; }
     printf '%s\t%s\tgiven\n' "$mb" "$given"; return 0
   fi
-  ref="$(awk -F'\t' -v r="$repo" '$1=="base" && $2==r {print $3; exit}' "$SPACES_DIR/$task/.space" 2>/dev/null)"
-  sha="$(awk -F'\t' -v r="$repo" '$1=="base" && $2==r {print $4; exit}' "$SPACES_DIR/$task/.space" 2>/dev/null)"
+  local recorded
+  recorded="$(task_base "$task" "$repo" 2>/dev/null || true)"
+  ref="${recorded%%	*}" sha="${recorded#*	}"
+  [ -n "$recorded" ] || { ref=""; sha=""; }
   if [ -n "$ref" ] && mb="$(git -C "$dir" merge-base HEAD "$ref" 2>/dev/null)"; then
     printf '%s\t%s\tmerge-base\n' "$mb" "$ref"
   elif [ -n "$sha" ] && git -C "$dir" cat-file -e "$sha^{commit}" 2>/dev/null; then
     printf '%s\t%s\trecorded\n' "$sha" "${ref:--}"
   else
-    echo "spaces/$task/.space records no base for $repo - pass --base <ref>"; return 1
+    echo "task '$task' records no base for $repo - pass --base <ref>"; return 1
   fi
 }
 
 review_one() {
   local target="$1" given="$2" task repo base sha fp changed
   resolve "$target" || { printf 'error\t%s\n' "$RESOLVE_ERR"; return 1; }
-  [ "$T_KIND" = space ] || { printf 'error\t%s\n' "review compares a space against its base - '$target' is a checkout, use <task>/<repo>"; return 1; }
+  [ "$T_KIND" = task ] || { printf 'error\t%s\n' "review compares a task against its base - '$target' is a checkout, use <task>/<repo>"; return 1; }
   task="${T_NAME%%/*}" repo="${T_NAME#*/}"
   base="$(review_base "$task" "$repo" "$T_DIR" "$given")" || { printf 'error\t%s\t%s\n' "$T_NAME" "$base"; return 1; }
   sha="${base%%	*}"
@@ -373,9 +440,9 @@ cmd_review() {
   case "$target" in
     */*) review_one "$target" "$given" || failed=1 ;;
     *)
-      [ -d "$SPACES_DIR/$target" ] || die "no space named '$target' - /space list shows what exists"
-      [ -n "$(space_targets "$target")" ] || die "space '$target' has no worktrees"
-      for t in $(space_targets "$target"); do
+      task_exists "$target" || die "no open task named '$target' - /task list shows what exists"
+      [ -n "$(task_targets "$target")" ] || die "task '$target' has no checkout to review"
+      for t in $(task_targets "$target"); do
         review_one "$t" "$given" || failed=$((failed + 1))
         echo
       done ;;
@@ -403,13 +470,16 @@ cmd_run() {
 # ---------------------------------------------------------- drop and prune --
 
 cmd_drop() {
-  local task="${1:-}" repo="${2:-}" path
+  local task="${1:-}" repo="${2:-}" path layout
   case "$task$repo" in ""|*..*|*/*) die "usage: graph.sh drop <task> [repo]" ;; esac
-  path="$GRAPHS/spaces/$task${repo:+/$repo}"
-  [ -d "$path" ] || return 0
-  rm -rf "$path"
-  rmdir "$GRAPHS/spaces/$task" 2>/dev/null
-  printf 'dropped\t%s\n' "$(rel "$path")"
+  for layout in tasks spaces; do
+    path="$GRAPHS/$layout/$task${repo:+/$repo}"
+    [ -d "$path" ] || continue
+    rm -rf "$path"
+    rmdir "$GRAPHS/$layout/$task" 2>/dev/null
+    printf 'dropped\t%s\n' "$(rel "$path")"
+  done
+  return 0
 }
 
 cmd_prune() {
@@ -440,7 +510,7 @@ cmd_slash() {
       printf 'mode\trun\n'; cmd_run "$@" ;;
     prune)
       printf 'mode\tprune\n'
-      for t in $(orphan_targets); do printf 'orphan\t%s\t%s\n' "$t" "$(rel "$GRAPHS/spaces/$t")"; done ;;
+      for t in $(orphan_targets); do printf 'orphan\t%s\t%s\n' "$t" "$(rel "$(orphan_data "$t")")"; done ;;
     *)
       printf 'mode\terror\nerror\t%s\n' "unknown '$sub' - usage: /graph [status] | build <target>|all | review <task>[/<repo>] | run <target> <query> | prune" ;;
   esac
@@ -455,6 +525,7 @@ case "${1:-}" in
   run)    shift; cmd_run "$@" ;;
   drop)   shift; cmd_drop "$@" ;;
   prune)  shift; cmd_prune ;;
+  mcp)    shift; write_mcp ;;
   slash)  shift; cmd_slash ${1+"$@"} ;;
   ""|-h|--help|help) usage ;;
   *) usage; exit 2 ;;

@@ -9,8 +9,8 @@ learned/<repo>/<skill>.md
 
 A skill that learns is split in two. Its `SKILL.md` is the **method**: how to do
 the thing well in any codebase, naming no repo and no library. The file here
-holds the **facts** for one repo: which logger backend uses, how sport's
-request ID travels, which habits not to copy. The skill reads this file when it
+holds the **facts** for one repo: which logger it uses, how its request ID
+travels, which of its test commands to run, which habits not to copy. The skill reads this file when it
 loads and follows it where the two disagree.
 
 Above both sits the repo's own `AGENTS.md`, where it has one. These files are a

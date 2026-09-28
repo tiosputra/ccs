@@ -1,6 +1,6 @@
 ---
-description: "Write a PRD for a task, then on your confirmation create its space, implement it test-first, review it, and stop for approval to open the PR."
-argument-hint: "<task idea> from branch <source-ref>"
+description: "Write a PRD for a task, then on your confirmation start the task, implement it test-first, review it, and stop for approval to open the PR."
+argument-hint: "<task idea> from branch <source-ref> [--space]"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Skill, Agent
 ---
 
@@ -13,12 +13,14 @@ Produces a **Product Requirements Document** — the requirements-phase artifact
 ```
 /plan-prd new-feature from branch origin/feature/m5.1
 /plan-prd fix promo codes expiring early from origin/develop
+/plan-prd rework booking engine from origin/main --space
 /plan-prd offline sync            <- no source branch: this command must ask
 ```
 
 Parse it as: everything before `from branch` / `from` / `--from` is the **idea**; what
-follows is the **source branch**. The idea also names the task, its space, its branch, and
-every downstream artifact.
+follows is the **source branch**. A `--space` anywhere asks for a space instead of the
+default in-place task. The idea also names the task, its branch, and every downstream
+artifact.
 
 ## Scope of this command
 
@@ -28,7 +30,7 @@ This command owns the **whole run**, but the PRD it writes first is requirements
 |---|---|
 | The problem, users, and evidence | The architecture |
 | Success criteria and scope | File paths or code patterns |
-| The space it proposes to create | An implementation task breakdown |
+| The task it proposes to start | An implementation task breakdown |
 | Open questions and risks | Anything `/plan` is for |
 
 If you find yourself writing implementation detail *into the PRD*, cut it — it belongs in
@@ -46,20 +48,20 @@ each step, because Gate 1 already approved the build.
 
 ### Phase 0 — PROPOSE THE TASK
 
-Settle the binding on paper. **Do not create anything yet** — the space is created after
+Settle the binding on paper. **Do not start anything yet** — the task is started after
 Gate 1, so the user can read the PRD and correct the plan before any branch exists.
 
 Derive a kebab-case `<task>` name from the idea (short, 2–4 words: `offline-sync`,
 `hotfix-username`). Then check what already exists:
 
 ```bash
-.claude/scripts/space.sh list
+.claude/scripts/task.sh list
 ls -d docs/*/ 2>/dev/null
 ls -d docs/*_<task>/ 2>/dev/null   # this task's directory, whatever day it opened
 ```
 
-- If a space named `<task>` already exists, reuse it — do not create a second one, and do
-  not rename the task. Say so in the PRD.
+- If a task named `<task>` is already open, reuse it — do not start a second one, do not
+  rename it, and keep its isolation. Say so in the PRD.
 - If a directory for `<task>` already exists, read the `prd.md` in it and offer to
   continue that task rather than overwriting. Never open a second directory for a task
   that already has one, and never re-date the one it has.
@@ -69,12 +71,18 @@ and confirm it back. If it did not, ask — and ask again rather than defaulting
 `origin/main`. It decides what the work is built on; getting it wrong means a rebase later.
 
 > Which branch should this start from? (e.g. `origin/main`, `origin/develop`,
-> `origin/feature/m5.1`, or per-repo `backend=origin/release-2`)
+> `origin/feature/m5.1`, or per-repo `<repo>=origin/release-2`)
 
 **Repos** you may propose rather than ask: infer from the framing answers which services
 the change touches, and state the proposal in the PRD. Gate 1 is where the user corrects
 it. Only ask outright if the scope leaves it genuinely unclear — and then fold the question
 into the Phase 1 set rather than spending a separate turn on it.
+
+**Isolation** you propose too. In place is the default: the task works in each
+`repos/<repo>` on its branch. Propose a space (`--space`) when the invocation asked for
+one, or when `task.sh list` shows another in-place task already holding one of the repos —
+a repo takes one in-place task at a time. `task.sh config` says what this machine
+defaults to. State the choice in the PRD; Gate 1 is where the user changes it.
 
 ### Phase 1 — FRAME
 
@@ -133,7 +141,7 @@ phrasing is the tell that you have a question and the user has the answer.
 
 Read the code first. A question you could settle by opening the file is not the user's
 question; go read the file. `/plan-prd` may read anything under `repos/` — reading is
-always allowed there, writing never is.
+always allowed. Writing happens only in the task's working directories, after Gate 1.
 
 Ask the survivors in one batch, not one per turn. Then write the PRD with those answers
 baked in as decisions, and let **Open Questions** hold only what genuinely could not be
@@ -153,7 +161,7 @@ mkdir -p docs/<YYYY-MM-DD>_<task>
 and `<task>` is the kebab-case task name — e.g.
 `docs/2026-08-28_offline-sync/prd.md`. This directory is where every later artifact of the
 task goes too: `plan.md`, `api-contract.md`, `testing.md`, `log.md`. Creating it is the one write this phase
-makes; no space, no branch, no code.
+makes; no task, no branch, no code.
 
 The date in the directory name is the day the task **opened** and never changes afterwards.
 A PRD edited later keeps its directory; only the *Last updated* line moves. Never re-date
@@ -164,7 +172,7 @@ existing directory (`ls -d docs/*_<task>/`) rather than guessing the path.
 
 Both dates come from `date +%F` in `YYYY-MM-DD`. *Created* is written once and never
 changes; *Last updated* is bumped every time the file is edited afterwards — at Gate 1
-corrections, when the space is created, and when a milestone flips to complete.
+corrections, when the task is started, and when a milestone flips to complete.
 
 #### PRD Template
 
@@ -173,22 +181,22 @@ corrections, when the space is created, and when a milestone flips to complete.
 
 *Created {YYYY-MM-DD} · Last updated {YYYY-MM-DD}*
 
-## Space to create
-<!-- PROPOSED, not created. Nothing exists yet - Gate 1 is where you approve this. -->
+## Task to start
+<!-- PROPOSED, not started. Nothing exists yet - Gate 1 is where you approve this. -->
 
 | Field | Value |
 |---|---|
 | Task | `<task>` |
-| Space | `spaces/<task>/` |
-| Repos | backend, sport |
+| Isolation | `inplace` — each repo worked in `repos/<repo>` · or `space` — worktrees under `spaces/<task>/` |
+| Repos | `<repo>`, `<repo>` |
 | New branch | `<prefix>/<task>` (same name in every repo) |
 | Source branch | `origin/feature/m5.1` |
-| Working directories | `spaces/<task>/backend/`, `spaces/<task>/sport/` |
+| Working directories | filled in once started, from `task.sh where <task>` |
 | PR base | `feature/m5.1` — one PR per repo |
-| Command that will create it | `.claude/scripts/space.sh add <task> backend,sport --from origin/feature/m5.1` |
+| Command that will start it | `.claude/scripts/task.sh start <task> <repo>,<repo> --from origin/feature/m5.1` (plus `--space` for a space) |
 
-Say if the repos or the source branch are wrong — this is the moment to change them,
-before any branch exists.
+Say if the repos, the isolation or the source branch are wrong — this is the moment to
+change them, before any branch exists.
 
 ## Problem
 {2-3 sentences: who has what problem, and what's the cost of leaving it unsolved?}
@@ -222,8 +230,8 @@ We'll know we're right when **{measurable outcome}**.
 
 | # | Milestone | Outcome | Repos | Status | Plan |
 |---|---|---|---|---|---|
-| 1 | {name} | {user-visible change} | backend | pending | — |
-| 2 | {name} | {user-visible change} | sport | pending | — |
+| 1 | {name} | {user-visible change} | {repo} | pending | — |
+| 2 | {name} | {user-visible change} | {repo} | pending | — |
 
 ## Open Questions
 <!-- Only what could NOT be settled in Phase 3.5. Anything the user could have answered -->
@@ -235,23 +243,24 @@ We'll know we're right when **{measurable outcome}**.
 |---|---|---|---|
 
 ---
-*Status: AWAITING APPROVAL — no space created yet. Confirm to build. ({YYYY-MM-DD})*
+*Status: AWAITING APPROVAL — nothing started yet. Confirm to build. ({YYYY-MM-DD})*
 ```
 
 ### Phase 5 — GATE 1: stop and wait
 
-Report, then **stop**. Do not create the space. Do not write code. The user asked for this
+Report, then **stop**. Do not start the task. Do not write code. The user asked for this
 pause so they can open the file and read it.
 
 ```
 PRD written: docs/<YYYY-MM-DD>_<task>/prd.md
 
-Proposed space
-  Task    <task>
-  Repos   backend, sport
-  Branch  <prefix>/<task>
-  From    origin/feature/m5.1
-  Nothing created yet.
+Proposed task
+  Task       <task>
+  Isolation  inplace | space
+  Repos      <repo>, <repo>
+  Branch     <prefix>/<task>
+  From       origin/feature/m5.1
+  Nothing started yet.
 
 Problem:    {one line}
 Hypothesis: {one line}
@@ -265,59 +274,64 @@ Validation status
 
 Open questions: {count} deferred ({count} resolved in the interview)
 
-Read it, then say the word and I'll create the space, implement milestone 1 test-first,
+Read it, then say the word and I'll start the task, implement milestone 1 test-first,
 and run code review. I'll stop again before opening any PR.
 ```
 
-Anything other than approval — a correction, a new source branch, a different repo list —
-means edit the PRD and stop again. Only an explicit yes moves to Phase 6.
+Anything other than approval — a correction, a new source branch, a different repo list or
+isolation — means edit the PRD and stop again. Only an explicit yes moves to Phase 6.
 
 ### Phase 6 — BUILD (only after Gate 1)
 
 Now run straight through. No further permission prompts; Gate 1 covered all of this.
 
-1. **Create the space** with the exact command the PRD named:
+1. **Start the task** with the exact command the PRD named:
 
    ```bash
-   .claude/scripts/space.sh add <task> <repos> --from <source-branch>
+   .claude/scripts/task.sh start <task> <repos> --from <source-branch>   # plus --space if the PRD says space
    ```
 
-   Report which worktrees were created, the branch, and the base commit per repo. If a repo
-   fails, say why and stop — do not retry with a different base ref.
+   Report which repos joined, where each one's working directory is, the branch, and the
+   base commit per repo. If a repo fails, say why and stop — do not retry with a different
+   base ref, and do not switch isolation. A repo held by another in-place task is the usual
+   reason; that is a Gate 1 correction, so report it and stop.
 
-   Then update the PRD: replace *Space to create* with the real values, change the
-   status line to `Status: IN PROGRESS`, and bump *Last updated* to today's `date +%F`.
+   Then update the PRD: replace *Task to start* with the real values — the working
+   directories are the ones `task.sh where <task>` prints — change the status line to
+   `Status: IN PROGRESS`, and bump *Last updated* to today's `date +%F`.
 
-2. **Read each new worktree's `AGENTS.md`**, where it has one:
+2. **Read each repo's `AGENTS.md`**, in its working directory, where it has one:
 
    ```bash
-   for r in spaces/<task>/*/; do [ -f "$r/AGENTS.md" ] && echo "$r"; done
+   .claude/scripts/task.sh where <task> | while IFS=$'\t' read -r repo dir; do
+     [ -f "$dir/AGENTS.md" ] && echo "$dir/AGENTS.md"
+   done
    ```
 
    These are the teams' rules for their own repos, and they outrank this command's
    conventions, the skills, and the learned files wherever they disagree
    (`CLAUDE.md`). Read them now, before the plan is written, so the plan is already
    shaped by them — not after the code is, when the fix is a rewrite. They do not
-   change where the work happens: the space, the two gates, and the task's
-   documents in `docs/<YYYY-MM-DD>_<task>/` are this workspace's, and stay.
+   change where the work happens: the task's working directories, the two gates, and
+   its documents in `docs/<YYYY-MM-DD>_<task>/` are this workspace's, and stay.
 
 3. **Plan the next pending milestone** — follow `/plan`'s PRD artifact mode. Write the plan
    beside the PRD, in the same directory: `plan.md` for milestone 1, `plan-m<N>.md` after
-   that, with working directories and base commits filled in. Flip that milestone's row to
-   `in-progress`.
+   that, with working directories, base commits and the workspace root (`task.sh root`)
+   filled in. Flip that milestone's row to `in-progress`.
 
    If the milestone changes anything a consumer can observe — a new endpoint, a new or
    changed response field, a new socket event, a new error to branch on — `/plan` also
    writes `api-contract.md` in that directory, per its **API Contract** section. That file
-   is read by the frontend and mobile teams, so it is written now, while the provider is
+   is read by the consumer teams, so it is written now, while the provider is
    still hypothetical, rather than reverse-engineered from the finished handler. One file
    per task: a later milestone appends its entries to the same one.
 
 4. **Implement it** with the `tdd-workflow` skill, once per repo the milestone touches.
-   Hand it four things: the plan path, the working directory `spaces/<task>/<repo>/`, the
-   evidence report path `docs/<YYYY-MM-DD>_<task>/testing.md`, and the API contract
-   `docs/<YYYY-MM-DD>_<task>/api-contract.md` when the milestone wrote one. The skill is space-blind
-   — give it directories and paths, never a task name — and it writes its evidence wherever
+   Hand it four things: the plan path, the working directory `task.sh where <task> <repo>`
+   printed, the evidence report path `docs/<YYYY-MM-DD>_<task>/testing.md`, and the API
+   contract `docs/<YYYY-MM-DD>_<task>/api-contract.md` when the milestone wrote one. The skill
+   is layout-blind — give it directories and paths, never a task name — and it writes its evidence wherever
    it is told, so passing that path is what keeps the whole task's evidence in one file
    instead of scattering a copy into each service repo. Every repo appends its own
    `## <repo>` section to that same file.
@@ -326,6 +340,16 @@ Now run straight through. No further permission prompts; Gate 1 covered all of t
    implementation — the tools to reach for first, the style it fixes, the steps it
    forbids. The skill is handed directories, so it will not go looking, and a rule
    found in one repo does not apply in the next.
+
+   **Several repos at once.** A milestone touching more than one repo may hand each
+   repo to a `tdd-guide` subagent instead, all dispatched together. Give each the
+   same things plus the workspace root (`task.sh root`) and that repo's base commit,
+   but pass the evidence as `return`, not the path: parallel agents must not edit one
+   file. Each replies with its `## <repo>` section; append them to `testing.md`
+   yourself, one per repo. An agent that stops - usually a repo whose
+   `tdd-workflow` facts are not learned - is reported to the user, not retried.
+   One repo, or a change where one repo's tests depend on another's code, stays
+   inline.
 
 5. **Review it.** First run `.claude/scripts/graph.sh review <task>`. It rebuilds each
    repo's code-review-graph if stale and prints, per repo, the changed functions, affected
@@ -339,8 +363,8 @@ Now run straight through. No further permission prompts; Gate 1 covered all of t
    one — a reviewer applying a skill's convention over the repo's own rule files a
    finding the team will reject. Tell reviewers they can ask the graph
    who calls a function with `.claude/scripts/graph.sh run <task>/<repo> query callers_of <name>`:
-   - Go (`sport`, `player`) -> `go-reviewer`
-   - TypeScript (`backend`) -> `typescript-reviewer`
+   - Go (a `go.mod` at the repo root) -> `go-reviewer`
+   - TypeScript or JavaScript -> `typescript-reviewer`
 
    Fix anything the review rates CRITICAL or HIGH, then re-run the affected tests. Report
    MEDIUM findings without necessarily fixing them; that is the user's call at Gate 2.
@@ -360,7 +384,7 @@ Done: <task> — milestone {N}, {milestone name}
 Evidence:  docs/<date>_<task>/testing.md   ({n} repo sections)
 Plan:      docs/<date>_<task>/plan.md      (plan-m{N}.md for a later milestone)
 Contract:  docs/<date>_<task>/api-contract.md   ({n} changes, {n} breaking — or "none")
-Uncommitted in: spaces/<task>/<repo>/   (nothing committed yet)
+Uncommitted in: {workdir per repo, from task.sh where <task>}   (nothing committed yet)
 
 Review findings left open:
   - {MEDIUM finding, or "none"}
@@ -383,22 +407,22 @@ If milestones remain, offer the next one after the PR is open.
 /plan-prd <idea> from branch <ref>
       |         writes docs/<date>_<task>/prd.md   <- nothing else created yet
    [GATE 1]     you read it and confirm
-      |         space.sh add -> /plan (+ api-contract.md) -> tdd-workflow -> reviewer agents
+      |         task.sh start -> /plan (+ api-contract.md) -> tdd-workflow -> reviewer agents
    [GATE 2]     you confirm it is ready
       |
     /pr         stage, commit, push, open one PR per repo
 ```
 
-- `/space` — create or tear down a space by hand, outside this flow.
+- `/task` — start, locate or finish a task by hand, outside this flow.
 - `/plan` — plan a later milestone of an existing PRD on its own.
-- `tdd-workflow`, `go-reviewer`, `typescript-reviewer` — space-blind; they are handed a
+- `tdd-workflow`, `go-reviewer`, `typescript-reviewer` — layout-blind; they are handed a
   working directory and a base ref, never a task name.
 - `/pr` — the only thing that commits.
 
 ## Success criteria
 
 - **SOURCE_BRANCH_EXPLICIT**: the source branch came from the invocation or from asking, never from a default.
-- **NOTHING_CREATED_BEFORE_GATE_1**: no space, no branch, no code — only the PRD file.
+- **NOTHING_STARTED_BEFORE_GATE_1**: no task, no branch, no code — only the PRD file.
 - **TWO_STOPS_EXACTLY**: the run pauses at Gate 1 and Gate 2, and nowhere else.
 - **PROBLEM_CLEAR**: problem is specific and evidenced (or flagged as assumption).
 - **USER_CONCRETE**: primary user is a specific role, not "users".
@@ -409,5 +433,5 @@ If milestones remain, offer the next one after the PR is open.
 - **ONE_TASK_ONE_DIRECTORY**: every artifact of the task — PRD, plans, API contract, evidence, log — is written inside `docs/<YYYY-MM-DD>_<task>/`, and nothing of this task is written anywhere else.
 - **PRD_DIRECTORY_DATED**: the directory is `docs/<YYYY-MM-DD>_<task>/` with the date from `date +%F`; an existing one is found by globbing `docs/*_<task>/`, never by guessing a date, and never re-dated.
 - **PRD_DATED**: the PRD carries *Created* and *Last updated* dates in `YYYY-MM-DD`, taken from `date +%F`, and *Last updated* is bumped on every later edit.
-- **NO_REPOS_PATHS**: no path under `repos/` appears anywhere in the PRD.
+- **WORKDIRS_FROM_TASK_SH**: every working directory in the PRD is one `task.sh where` printed, never a path built by hand.
 - **NOTHING_COMMITTED_BEFORE_GATE_2**: the build leaves work uncommitted; `/pr` commits it.

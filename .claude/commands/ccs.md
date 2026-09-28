@@ -10,7 +10,7 @@ allowed-tools: Bash(.claude/scripts/ccs.sh:*), Read, Write, Edit, Glob, Grep
 
 ## What this is
 
-`/space` looks after a task. `/ccs` looks after the thing that runs tasks: the
+`/task` looks after a task. `/ccs` looks after the thing that runs tasks: the
 commands, skills, scripts and rules under `.claude/`, and whether they still
 describe this workspace as it actually is.
 

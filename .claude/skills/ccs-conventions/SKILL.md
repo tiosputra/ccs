@@ -2,7 +2,7 @@
 name: ccs-conventions
 description: How this workspace's own machinery is built - the script/command split, how a slash command and a skill are shaped, the guard's real constraints, and the naming rules that keep one task one word. Use when creating or editing anything under .claude/, CLAUDE.md, or the workspace README - not when working on a service repo.
 metadata:
-  origin: swing
+  origin: workspace
 ---
 
 # ccs conventions
@@ -11,10 +11,10 @@ Rules for changing the workspace system itself: `.claude/commands/`,
 `.claude/skills/`, `.claude/scripts/`, `CLAUDE.md`, `README.md`, and the
 directory READMEs.
 
-This is about the machinery, never about a service. Work on `backend`, `sport`,
-`player`, `admin` or `payment` is a **task** — it needs a PRD, a space, and the
-two gates. Work on the machinery lands in this repo directly, because a space is
-a worktree of `repos/<service>` and the system is not a service.
+This is about the machinery, never about a service. Work on any repo under
+`repos/` is a **task** — it needs a PRD, a task started with `/task`, and the
+two gates. Work on the machinery lands in this repo directly, because a task
+works in `repos/<repo>` (or a worktree of it) and the system is not a repo there.
 
 ## When to Activate
 
@@ -58,16 +58,25 @@ is a new line in the script, not a new paragraph in the command.
 **Almost never build an agent.** Agents start with no context and cannot write
 back to the session that spawned them. Workspace bookkeeping needs exactly the
 context the main session has — the task name, the PRD, the URL that just came
-back from `gh`. The existing agents (`go-reviewer`, `typescript-reviewer`) earn
-their place because review genuinely benefits from a fresh reading of a diff.
-Nothing about managing the workspace does.
+back from `gh`. The reviewers (`go-reviewer`, `typescript-reviewer`) earn their
+place because review genuinely benefits from a fresh reading of a diff.
+`tdd-guide` earns its place differently: it runs one repo's `tdd-workflow` cycle
+so a multi-repo milestone can run its repos in parallel. It carries no method of
+its own — it reads the skill — and it returns its evidence rather than writing a
+shared file. Nothing about managing the workspace benefits from an agent.
+
+An agent imported from elsewhere is adapted before it is used, the way these
+were: it is handed one working directory and stops without one, it names the
+skill it follows instead of restating a method, it says what it may write and
+that it never commits, and its `description` says when the flow calls it —
+never "use PROACTIVELY", which pulls sessions off the flow.
 
 ## Writing a command
 
 ```markdown
 ---
 description: One line, imperative, what it does. Shown in the picker.
-argument-hint: "add <task> [repos] | remove <task> | list"
+argument-hint: "start <task> [repos] | finish <task> | list"
 allowed-tools: Bash(.claude/scripts/thing.sh:*), Read, Write
 ---
 
@@ -83,19 +92,19 @@ BANG`.claude/scripts/thing.sh slash $ARGUMENTS`
 ```
 
 - **A leading bang runs eagerly, before the model reads anything.** So the
-  script must be safe to run unconditionally. `space.sh slash remove` prints a
-  *report* and removes nothing, precisely because the removal must not happen
+  script must be safe to run unconditionally. `task.sh slash finish` prints a
+  *report* and releases nothing, precisely because the finish must not happen
   before the model has decided it is safe. Anything destructive gets a `slash`
   mode that only looks.
 
   `BANG` in the template above stands for that literal character. A real one in
   this file would run every time the skill loads - which is the bug this wording
   avoids.
-- **Dispatch on a `mode` line.** The script prints `mode<TAB>add` first; the
+- **Dispatch on a `mode` line.** The script prints `mode<TAB>start` first; the
   command has a section per mode and the model follows the one that matches.
 - **`allowed-tools` narrowly.** Without it every invocation prompts; too wide
   and the command can do things its prose never described.
-- **Say what to refuse.** The best parts of `/space` and `/pr` are the "stop and
+- **Say what to refuse.** The best parts of `/task` and `/pr` are the "stop and
   report, do not retry with different flags" rules. A command that only says
   what to do will improvise when it fails.
 
@@ -121,15 +130,16 @@ BANG`.claude/scripts/thing.sh slash $ARGUMENTS`
   with `sed -n '3,20p'`. One source for the help text.
 - **macOS ships bash 3.2.** No associative arrays, no `${var,,}`, no `mapfile`.
   Tab-separated lines and `awk` are the house workaround — see
-  `space.sh`'s `BASE_OVERRIDES`.
+  `task.sh`'s `BASE_OVERRIDES`.
 - **`set -euo pipefail` for scripts that act; drop `-e` for scripts that
   report.** A health check that aborts on the first `grep` matching nothing
   reports less than nothing. `ccs.sh` says so in a comment where it drops it.
 - **Output is data, not decoration.** `key<TAB>value` lines a model can read and
   a human can skim. Colors only when `[ -t 1 ]`.
-- **Check everything before mutating anything.** `space.sh remove` validates
-  every repo before touching the first, so a blocked teardown leaves the space
-  whole instead of half gone.
+- **Check everything before mutating anything.** `task.sh finish` validates
+  every repo before touching the first, so a blocked finish leaves the task
+  whole instead of half released. The same goes for metadata: `task.sh` writes a
+  task's record only when its first repo actually joins.
 - Add the script to `settings.json` `permissions.allow` so it does not prompt,
   and reference it from at least one command — `/ccs` flags scripts nothing
   invokes.
@@ -163,22 +173,40 @@ project and the facts are measured once per repo instead of on every load:
   workspace is confidently wrong. Point at the file.
 - **A repo or service name in a learning skill's `SKILL.md` is a fact that leaked
   into the method.** Move it to the learned file.
-- Workspace glue is a third kind, neither method nor fact: spaces, gates, where
-  `testing.md` goes. It belongs in the command that invokes the skill, the way
-  `/plan-prd` hands `tdd-workflow` its report path.
+- Workspace glue is a third kind, neither method nor fact: working directories,
+  gates, where `testing.md` goes. It belongs in the command that invokes the
+  skill, the way `/plan-prd` hands `tdd-workflow` its working directory and report
+  path.
+- **No skill or agent names a path layout or a repo.** Not `spaces/`, not
+  `repos/<name>`, not `space.sh`; a skill is handed a working directory and works
+  there. `/ccs` flags a skill or agent that names a repo this machine knows — a
+  checkout under `repos/`, or one something was learned about.
+- A skill that describes a repo rather than code written in it — who a path
+  faces, where an app routes links — may learn reference-only repos too. It
+  says so with `learns-reference: true` beside `learns: true`; `qa-release-note`
+  does, because the app that routes links is usually a reference repo. Every
+  other skill leaves reference repos out, since nobody writes code there.
 - Not every skill learns. One or two facts do not earn a learned file and a
   fingerprint; a repo's own `AGENTS.md` is enough. When a team writes down what a
   learned file had been guessing, the learned file gets shorter, not longer.
 
 ## Naming
 
-One kebab-case **task** name is reused everywhere: space directory, branch,
-PRD, plan, TDD evidence, wrap-up log. "Task", "space", "feature", "story",
-"bugfix", "hotfix" are the same thing; `.claude/` says **task**.
+One kebab-case **task** name is reused everywhere: branch, metadata, space
+directory when it has one, PRD, plan, TDD evidence, wrap-up log. "Task",
+"space", "feature", "story", "bugfix", "hotfix" are the same thing; `.claude/`
+says **task**, and "space" means only the `--space` isolation.
 
 The unit of work is a task. Do not introduce a second word for it, and do not
-add a command named for a concept an existing command already owns — `/space`
-owns spaces, so a `space-manager` beside it splits the concept in two.
+add a command named for a concept an existing command already owns — `/task`
+owns tasks, so a `task-manager` beside it splits the concept in two.
+
+**Where a task's work lives is decided in one place.** `tasklib.sh` turns a task
+and a repo into a working directory; `task.sh where` prints it; every command,
+script and hand-off asks rather than building `repos/<repo>` or
+`spaces/<task>/<repo>` itself. A new script that needs a task's files sources
+`tasklib.sh`. The guard is the one exception: it reads the same metadata format
+from python, and `tasklib.sh`'s header documents that format for both.
 
 **One task, one directory.** Everything written about a task lives in
 `docs/<YYYY-MM-DD>_<task>/`. The standard artifacts have fixed names that
@@ -193,25 +221,27 @@ the task opened and never changes, so commands find a directory by globbing
 `docs/*_<task>/` and never by reconstructing its name.
 
 The one artifact that is easy to get wrong is the TDD evidence. `tdd-workflow`
-is space-blind and writes wherever it is told; if nobody tells it, it writes
+is layout-blind and writes wherever it is told; if nobody tells it, it writes
 inside the service repo and the evidence ends up in that repo's pull request,
 split per service. Whoever invokes it passes the report path.
 
 ## Settings are per machine, and no tracked file names one
 
-Branch prefix and default base ref differ per person. They resolve through
-`.claude/scripts/config.sh`, highest layer first:
+Branch prefix, default base ref and default isolation differ per person. They
+resolve through `.claude/scripts/config.sh`, highest layer first:
 
 | Layer | Where | For |
 |---|---|---|
-| environment | `SPACE_BRANCH_PREFIX=x space.sh add …` | a one-off |
+| environment | `TASK_BRANCH_PREFIX=x task.sh start …` | a one-off |
 | `.env` | workspace root, gitignored | your standing preference |
 | built-in | the `cfg_resolve` fallback in the script | someone with no `.env` |
 
 `.env.example` is the tracked template. Adding a setting means three edits:
 `cfg_resolve NAME default` in the script that uses it, an entry in
 `.env.example`, and nothing else — `/ccs` fails if the template falls behind
-the scripts, or if anyone commits their own `.env`.
+the scripts, or if anyone commits their own `.env`. Renaming one uses
+`cfg_resolve_renamed NEW OLD default`, which keeps reading the old name, so no
+machine's `.env` breaks on a pull.
 
 **Never write a literal prefix into a tracked file** — not a doc, not a PRD,
 not a plan, not a report you print. It is correct only for its author. Docs
@@ -220,8 +250,8 @@ write `<prefix>/<task>`; `/ccs` flags any tracked file that hardcodes one.
 When you need the real value, ask the workspace, never your memory:
 
 ```
-/space config          what each setting resolved to, and which layer won
-space.sh report <task> the branch a space is actually on
+/task config           what each setting resolved to, and which layer won
+task.sh report <task>  the branch and working directory a task is actually on
 ```
 
 This is the same principle as the repo roster, and the general rule behind
@@ -229,26 +259,38 @@ both: **anything that varies per machine or over time is printed by a script,
 never stated in prose.** A doc's job is to say where the value comes from.
 
 One consequence worth knowing: changing your prefix does not rename branches
-that already exist. A space created under an old prefix keeps working — every
-command reads the branch from git — but `/space add` adding a repo to that
-space will create a branch under the *new* prefix instead of joining the old
-one. Finish a task under the prefix it started with.
+that already exist. A task started under an old prefix keeps working — its
+metadata records its branch, and adding a repo to it reuses that branch. Only a
+new task picks up the new prefix.
 
 ## The guard is the only enforcement
 
-`guard.sh` is a `PreToolUse` hook: `repos/` is read-only, no exceptions, and it
-is not a matter of judgment. Everything else in `.claude/` is advice a session
-can talk itself out of.
+`guard.sh` is a `PreToolUse` hook, and it is not a matter of judgment.
+Everything else in `.claude/` is advice a session can talk itself out of. It
+enforces three rules:
 
-It enforces a second rule too. `REFERENCE_REPOS` in `.env` is a comma list of
-aliases that are read-only *everywhere* — `repos/<repo>/…` as always, and also
-`spaces/<task>/<repo>/…`, which is the part `repos/` protection alone misses.
-The guard resolves that setting through `config.sh`, the same three-layer
-precedence as every other one, so the environment can pin it for a test run and
-an unreadable `.env` degrades to sealing `repos/` alone rather than to sealing
-nothing. `space.sh` reads it as well: a reference repo gets no worktree, so in
-practice the space path never exists. The guard covers it anyway, because one
-made by hand before the setting existed would otherwise be a hole.
+- **`repos/<repo>` is sealed unless an in-place task owns it.** Owned means the
+  checkout's HEAD is the task branch *and* the task's metadata lists the repo,
+  both read from files, no subprocess. A branch switched by hand is not a task,
+  and metadata whose checkout moved on holds nothing. Any doubt — unreadable HEAD
+  or metadata — reads as not owned. The checkout root and its `.git` stay sealed
+  even when owned.
+- **In an owned checkout, git may add, commit, and push the task branch.**
+  `checkout`, `switch`, `reset`, `rebase`, `merge`, `pull` and the mutating
+  `branch`/`tag`/`worktree` forms are refused — only `task.sh` moves branches —
+  and a push whose destination is not the task branch is refused, as are
+  `--all`, `--delete` and an empty-ref push. Work reaches the base branch through
+  a PR.
+- **`REFERENCE_REPOS` are read-only everywhere**, in `repos/` whatever a task
+  claims, and in `spaces/<task>/<repo>/…`. The guard resolves that setting
+  through `config.sh`, so the environment can pin it for a test run and an
+  unreadable `.env` degrades to an empty list, never to unsealing anything.
+  `task.sh` reads it as well, so no task includes a reference repo; the guard
+  covers it anyway.
+
+Plain commands are judged where they run: the directory a command `cd`s into,
+or else the session's cwd. So `git commit` from a session already sitting inside
+a sealed checkout is refused just as `git -C repos/<repo> commit` is.
 
 It reads command text rather than a parsed shell, so its precision is a design
 choice rather than a guarantee. It aims to be exact in both directions: a write
@@ -259,10 +301,17 @@ What passes:
 
 - Reading. `grep`, `find`, `cat`, `git log`, `git status`, `git diff`,
   `git show`, `git for-each-ref` against `repos/` all pass.
-- **Redirects whose target is not inside a checkout.** `cd repos/backend && ls
-  2>/dev/null` is fine, as are `2>&1`, `> /tmp/out`, and a write into
-  `spaces/`. The guard resolves each redirect target against the directory the
-  command `cd`-ed into, so only one that genuinely lands in `repos/` is refused.
+- **Redirects whose target is not inside a sealed checkout.** `cd repos/<repo> &&
+  ls 2>/dev/null` is fine, as are `2>&1`, `> /tmp/out`, and a write into a space
+  or a checkout a task holds. The guard resolves each redirect target against the
+  directory the command runs in, so only one that genuinely lands in a sealed
+  checkout is refused.
+- **File commands judge the paths they name.** `rm`, `cp`, `mv`, `mkdir`,
+  `sed -i` and friends are refused only for an argument that resolves into a
+  sealed checkout: an absolute path, or one starting at `repos/` or `spaces/`. A
+  word that merely contains `repos` (`$SP/ws/repos`, `myrepos`) is not a path to
+  it, and an argument with an unexpanded `$VAR` is left alone rather than
+  guessed at.
 - **Read-only forms of the dual verbs.** `branch`, `tag`, `worktree` and
   `stash` each have a form that only reports: `git -C repos/X branch --list`,
   `-a`, `--merged`, `--show-current`, `tag -l`, `worktree list`, `stash list`,
@@ -271,32 +320,39 @@ What passes:
   blocked as before.
 - **An ASCII arrow is not a redirect.** `->` and `=>` never introduce one in
   shell, so a heredoc or a printed line reading
-  `spaces/x/backend -> repos/backend` passes.
+  `spaces/x/<repo> -> repos/<repo>` passes.
 - **`repos/README.md`.** It is tracked here (the gitignore un-ignores it) and
   describes the roster rather than living inside a checkout, so it is writable
   from a session. `repos/` itself, every `repos/<repo>/…` path, and a lookalike
   such as `repos/README.md.bak` stay sealed.
-- `git add`/`commit`/`push` are expected inside a space and blocked in `repos/`
-  — and blocked in the space too when the repo is reference-only.
+- `git add`/`commit`/`push` are expected in a space and in an owned checkout,
+  and blocked in a sealed one — and blocked everywhere when the repo is
+  reference-only.
 - **A reference alias is matched as a whole path segment.** With
   `REFERENCE_REPOS=mobile`, `spaces/t/mobile-app/…` is writable and so is
-  `spaces/t/backend/src/mobile/…`; only `spaces/t/mobile` and what is under it
-  is sealed. A task literally named `mobile` — `spaces/mobile/backend/…` — is
+  `spaces/t/<repo>/src/mobile/…`; only `spaces/t/mobile` and what is under it
+  is sealed. A task literally named `mobile` — `spaces/mobile/<repo>/…` — is
   unaffected, because the alias is matched in the repo position, not the task
   position.
 
 Residual cases, still worked around rather than weakened — an over-eager guard
 is the right failure direction:
 
-- A **literal `> repos/backend/f.txt` inside a heredoc body** is still read as a redirect,
+- A **literal `> repos/<repo>/f.txt` inside a heredoc body** is still read as a redirect,
   because the guard does not track heredoc boundaries. Put that content in a
   file and run the file.
 - Deep quoting, `eval`, and command substitution can still fool the text match
   either way. Nothing here is a substitute for not trying.
+- A file command naming a path through an unexpanded variable
+  (`rm -rf $DIR/src`) is not judged, because its value is unknown to the guard.
+  The file tools and redirects into a literal path still are.
 
 If you change the guard, run the full battery, not one payload — every
-relaxation above is one a plausible regex change would undo silently. The
-header comment carries a single hand-test payload for a smoke check. A guard
+relaxation above is one a plausible regex change would undo silently.
+`guard-test.sh` builds a fixture workspace for the ownership cases - owned,
+unowned, handmade branch, space-isolated, `gitdir:` pointer, reference repo,
+unreadable metadata - so they run without a real task. The header comment
+carries a single hand-test payload for a smoke check. A guard
 that exits non-zero on a malformed payload bricks the session, which is why it
 fails open on anything unexpected — keep that property.
 
@@ -318,10 +374,11 @@ Two design rules the checks themselves follow, worth keeping if you add more:
 - **Never make a check that can only be satisfied by rewriting history.** Closed
   tasks' PRDs, plans and logs record what happened under whatever rule applied
   then. A task counts as closed once its directory holds a `log.md`, written
-  just before teardown. The branch-prefix check skips those for that reason —
+  just before the task finishes. The branch-prefix check skips those for that reason —
   otherwise it would report the same permanent findings forever, and the only
   way to silence it would be to falsify the record.
 - **Prefer checking that a doc points at the truth over checking that it repeats
   it.** The repo roster is read from disk, so the check asks whether the docs
-  send a reader to `/space repos` and whether they name a service that does not
-  exist — not whether every service is listed. Nothing lists them, on purpose.
+  send a reader to `/task repos` and whether they name a repo that is not
+  checked out — not whether every repo is listed. Nothing lists them, on
+  purpose. Docs write `repos/<repo>`, never a real name.

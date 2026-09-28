@@ -16,31 +16,30 @@ applying anything below, and follow it wherever the two disagree. It was written
 for that codebase; this file was not. Where it is silent, this skill applies.
 See `CLAUDE.md`.
 
-## In this workspace
+## Twins in the repo you are in
 
-The examples below come from a Next.js + Supabase + Vitest project. Nothing in swing
-looks like that: `backend` is Express with Sequelize and Jest, `sport` and `player` are Go
-with `go test`. The *patterns* transfer exactly; the code does not. Read the snippets as
-illustrations of a failure mode, never as something to copy in.
+The examples below come from a Next.js + Supabase + Vitest project. The repo you are in
+may look nothing like that. The *patterns* transfer exactly; the code does not. Read the
+snippets as illustrations of a failure mode, never as something to copy in.
 
-Two of the translations matter more than the rest.
+Which twin paths exist in *this* repo is a fact about it, measured once: read the
+`## Twin paths` section of `.claude/learned/<repo>/tdd-workflow.md` (the `tdd-workflow`
+skill says how to check it is fresh, and `/learn tdd-workflow <repo>` writes it). Where
+the repo has no sandbox mode, the "production path vs sandbox path" pattern shows up as a
+different pair of twins. These are the ones that diverge most often:
 
-**There is no sandbox mode here** (checked 2026-09-09 - no `SANDBOX_MODE` or equivalent
-fork in `backend/src`). So the "production path vs sandbox path" pattern, which that
-project saw in three of four regressions, shows up in swing as a different pair of twins:
-
-| The twin paths that actually diverge here | Why it goes wrong |
+| Twin paths | Why it goes wrong |
 |---|---|
 | A detail route and the list route returning the same object | A field is added to one shape, and the other is never opened |
-| An HTTP response and the socket payload carrying the same object | `src/services/io/<domain>/` emits its own object, far from the handler |
-| A Sequelize `attributes:` projection and the response built from it | The field is written into the response and arrives `undefined`, with no type error |
+| An HTTP response and a socket or event payload carrying the same object | The emitter builds its own object, far from the handler |
+| An ORM projection (`attributes:`, a `SELECT` list) and the response built from it | The field is written into the response and arrives `undefined`, with no type error |
 | A Go struct and its `json:` tags | A new field serializes under a name nobody agreed to, or not at all |
 
-**The socket path is this workspace's worst blind spot.** A REST change eventually shows
-up in a generated spec someone reads; a socket payload is built in a handler no consumer
-will ever open, and nothing generates a description of it. When a change touches an object
-that some `io/` module also emits, that emit site is the path most likely to be missed -
-grep for the field there before declaring the work done.
+**The path nothing describes is the worst blind spot.** A REST change eventually shows up
+in a generated spec someone reads; a socket or event payload is built in a handler no
+consumer will ever open, and often nothing generates a description of it. When a change
+touches an object that such an emitter also sends, that emit site is the path most likely
+to be missed - grep for the field there before declaring the work done.
 
 The rest of the skill - write the test where the bug was, name it after the bug, run the
 suite before the review rather than after - applies unchanged.

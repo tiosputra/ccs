@@ -3,26 +3,33 @@
 # release-notes.sh - deterministic facts about a release, from a stated list of
 # pull requests.
 #
-# A release here is not a branch. sport, payment, player, backend and admin all
-# merged feature/m5.1 into main, but the same wave also merged hot/… and
-# 5.1-additional/… straight to main, and mobile uses a scheme of its own. So the
-# PR list is stated by the user and this script never tries to infer it.
+# A release is not a branch. One wave routinely merges a feature branch into
+# several repos and, the same day, hotfix branches straight into the same base,
+# while an app ships on a scheme of its own. So the PR list is stated by the
+# user and this script never tries to infer it.
 #
-# Everything comes from `gh`, never from repos/. Those checkouts cannot be
-# refreshed from a session - guard.sh blocks `git fetch` under repos/ - so they
-# are only as fresh as their last fetch. repos/ is read here only for slow-
-# moving architecture: deploy triggers, proto copies, the deeplink registry.
+# Every release fact comes from `gh`, never from repos/. Those checkouts are
+# only as fresh as their last fetch. repos/ is read here only for slow-moving
+# architecture: deploy triggers, contract copies, an app's route registry.
 #
-# Those architecture reads come from repos/ and NEVER from spaces/. A space is
-# a worktree on somebody's task branch, carrying half-finished and uncommitted
-# work; reading a deploy trigger or a proto out of one describes that task, not
-# the service. repos/ is the canonical checkout, and being read-only is exactly
-# what makes it the right thing to read. Every local read goes through
-# repo_path(), which resolves under repos/ or refuses.
+# What a path means in a given repo - who it faces, where its app keeps its
+# route registry - is a fact about that repo, learned once by
+# `/learn qa-release-note <repo>` into .claude/learned/<repo>/qa-release-note.md.
+# This script reads the two machine-read sections of that file and guesses
+# nothing when it is missing: it prints a `learn` record instead.
+#
+# Those architecture reads come from a git ref, NEVER from a working tree. A
+# task works on its own branch - in a space's worktree, or in place in
+# repos/<repo> itself - carrying half-finished and uncommitted work; reading a
+# deploy trigger or a proto out of that describes the task, not the service.
+# So every local read goes through repo_path(), which reads the file from the
+# repo's default branch (origin/HEAD) whatever its checkout is on, and refuses
+# anything else.
 #
 # Usage:
 #   release-notes.sh roll-call <name> <pr-url...>   cheap: state, size, checks
 #   release-notes.sh report    <name> <pr-url...>   full: facts + extraction
+#   release-notes.sh facts     <org/repo> <diff>    local facts for one saved diff, no gh
 #   release-notes.sh slash     <args...>            dispatcher for /release-notes
 #
 # Output is key<TAB>value lines. Multi-field records are documented at the head
@@ -35,9 +42,11 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 RELEASE_DIR="$ROOT/release"
+LEARNED="$ROOT/.claude/learned"
+. "$SCRIPT_DIR/tasklib.sh"
 TODAY="$(date +%Y-%m-%d)"
 
-usage() { sed -n '3,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '3,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 warn() { printf 'warn\t%s\n' "$1"; }
 kv()   { printf '%s\t%s\n' "$1" "$2"; }
@@ -60,33 +69,46 @@ parse_pr() {
     | sed -n 's|^https://github.com/\([^/]*\)/\([^/]*\)/pull/\([0-9][0-9]*\).*$|\1/\2\t\3|p'
 }
 
-# The one chokepoint for reading anything on disk. Takes a repo alias and an
-# optional path under it, and resolves inside repos/ or prints nothing.
-#
-# Everything local goes through here so the "repos/, never spaces/" rule is a
-# property of the script rather than a habit each caller has to remember. A
-# caller that builds its own path is a bug; there is no second way in.
-repo_path() {
-  local al="$1" rel="${2:-}" p dir base real
-  case "$al" in ""|-|*/*|.|..) return 1 ;; esac
-  # A `..` anywhere in the relative part would climb out of repos/ and into
-  # spaces/. Rejecting the segment is not enough on its own, so the resolved
-  # path is checked below too - textual checks on an unresolved path are how
-  # this kind of guard usually leaks.
-  case "/$rel/" in */../*) return 1 ;; esac
-  p="$ROOT/repos/$al${rel:+/$rel}"
-  [ -e "$p" ] || return 1
+# The ref a repo's architecture is read from: its remote default branch, which
+# no task can move. A clone without origin/HEAD falls back to the base commit of
+# the in-place task holding it, if any, and only then to HEAD - which, with no
+# task holding the checkout, is the branch it was cloned on.
+canonical_ref() {
+  local dir="$ROOT/repos/$1" t base
+  if git -C "$dir" rev-parse --verify --quiet refs/remotes/origin/HEAD >/dev/null; then
+    printf '%s' refs/remotes/origin/HEAD; return 0
+  fi
+  if t="$(task_holding "$1")"; then
+    base="$(task_base "$t" "$1")" && { printf '%s' "${base#*	}"; return 0; }
+  fi
+  printf '%s' HEAD
+}
 
-  dir="$(dirname "$p")"; base="$(basename "$p")"
-  real="$(cd "$dir" 2>/dev/null && pwd -P)" || return 1
-  real="$real/$base"
-  case "$real" in "$(cd "$ROOT/repos" && pwd -P)"/*) ;; *) return 1 ;; esac
-  printf '%s' "$p"
+# The one chokepoint for reading anything local. Takes a repo alias and a path
+# inside it, reads that file at canonical_ref, and prints the path of a copy in
+# the scratch directory - or prints nothing if the file is not on that ref.
+#
+# Everything local goes through here so the "a ref, never a working tree" rule
+# is a property of the script rather than a habit each caller has to remember.
+# A caller that builds its own path is a bug; there is no second way in.
+repo_path() {
+  local al="$1" rel="${2:-}" dir ref out
+  case "$al" in ""|-|*/*|.|..) return 1 ;; esac
+  case "/$rel/" in */../*|//) return 1 ;; esac
+  dir="$ROOT/repos/$al"
+  [ -e "$dir/.git" ] || return 1
+  ref="$(canonical_ref "$al")"
+  git -C "$dir" cat-file -e "$ref:$rel" 2>/dev/null || return 1
+  [ -n "$WORK" ] || return 1
+  out="$WORK/ref/$al/$rel"
+  mkdir -p "$(dirname "$out")" || return 1
+  git -C "$dir" show "$ref:$rel" >"$out" 2>/dev/null || return 1
+  printf '%s' "$out"
 }
 
 # Local checkout whose origin matches <org>/<repo>, or "-" when not checked out.
-# Both orgs in use are handled (Getswing-Team and getswing), and so is a repo
-# that was never cloned here - the URL carries everything gh needs.
+# Matching is on the org/repo slug, so a repo cloned under a renamed org still
+# resolves, and one never cloned here is fine - the URL carries all gh needs.
 alias_for() {
   local slug="$1" d url
   for d in "$ROOT"/repos/*/; do
@@ -123,7 +145,7 @@ roll_call() {
       --jq '[
              .state, .headRefName, .baseRefName,
              ("+\(.additions)/-\(.deletions)"), (.changedFiles|tostring),
-             (.reviewDecision // "NONE"), (.mergeStateStatus // "?"),
+             (if (.reviewDecision // "") == "" then "NONE" else .reviewDecision end), (.mergeStateStatus // "?"),
              ([.statusCheckRollup[]? | select(.conclusion != null and .conclusion != "SUCCESS" and .conclusion != "NEUTRAL" and .conclusion != "SKIPPED")] | length | tostring),
              .title
             ] | @tsv' 2>/dev/null)"
@@ -178,26 +200,42 @@ missed_check() {
 
 # ------------------------------------------------------------------- facts --
 
-# Env keys a PR adds. The Go services declare service config in exactly one
-# file, internal/infrastructure/config/config.go - but a one-off tool reads its
-# own (player's credit backfill wants BACKEND_DB_DSN and SPORT_DB_DSN, and those
-# must NOT go into the deployment config). So every file is scanned and the path
-# is printed with the key: where it was read decides what to do about it.
+# The learned release facts for a checkout alias, or nothing.
+learned_release() {
+  local f="$LEARNED/$1/qa-release-note.md"
+  [ "$1" != "-" ] && [ -f "$f" ] && printf '%s' "$f"
+}
+
+# One section of a learned file, heading excluded.
+learned_section() {
+  awk -v h="## $2" '$0 == h { on = 1; next } /^## / { on = 0 } on' "$1"
+}
+
+# Env keys a PR adds, and the file that reads each one. Where a key is read
+# decides what to do with it: service configuration belongs in the deployment
+# config, a one-off tool's key never does. So every file is scanned and the path
+# is printed with the key. Covers the common forms: Go os.Getenv / LookupEnv,
+# Node process.env.KEY and process.env["KEY"], Python os.environ / os.getenv,
+# Ruby ENV["KEY"], and new KEY= lines in any .env.example.
 # env<TAB>org/repo<TAB>KEY<TAB>file
 facts_env() {
   local slug="$1" diff="$2"
   awk -v slug="$slug" '
+    function emit(k) { if (k ~ /^[A-Z][A-Z0-9_]*$/) print "env\t" slug "\t" k "\t" f }
     /^\+\+\+ b\// { f = substr($0, 7); next }
     /^\+/ {
       line = $0
-      while (match(line, /os\.Getenv\("[A-Z0-9_]+"\)/)) {
-        k = substr(line, RSTART + 11, RLENGTH - 13)
-        print "env\t" slug "\t" k "\t" f
-        line = substr(line, RSTART + RLENGTH)
+      while (match(line, /(Getenv|LookupEnv|getenv|environ\.get|environ\[|ENV\[|ENV\.fetch\()\(?[ ]*["\x27][A-Z][A-Z0-9_]*["\x27]/)) {
+        k = substr(line, RSTART, RLENGTH); sub(/^[^"\x27]*["\x27]/, "", k); sub(/["\x27]$/, "", k)
+        emit(k); line = substr(line, RSTART + RLENGTH)
+      }
+      line = $0
+      while (match(line, /process\.env(\.[A-Z][A-Z0-9_]*|\[["\x27][A-Z][A-Z0-9_]*["\x27]\])/)) {
+        k = substr(line, RSTART + 11, RLENGTH - 11); gsub(/[^A-Z0-9_]/, "", k)
+        emit(k); line = substr(line, RSTART + RLENGTH)
       }
       if (f ~ /\.env\.example$/ && $0 ~ /^\+[A-Z][A-Z0-9_]*=/) {
-        k = substr($0, 2); sub(/=.*/, "", k)
-        print "env\t" slug "\t" k "\t" f
+        k = substr($0, 2); sub(/=.*/, "", k); emit(k)
       }
     }
   ' "$diff" | sort -u
@@ -207,24 +245,24 @@ facts_env() {
 facts_migrations() {
   local slug="$1" diff="$2"
   changed_files "$diff" \
-    | grep -E '(^|/)migrations/.*\.(sql|ts|js)$' \
+    | grep -E '(^|/)migrations?/.*\.(sql|ts|js|go|py|rb)$' \
     | sed "s|^|migration	$slug	|"
 }
 
 # What merging actually does, read from the repo's own prod workflow.
 # deploy<TAB>org/repo<TAB>trigger<TAB>note
 facts_deploy() {
-  local slug="$1" al wf on note
+  local slug="$1" al wf on note f trig
   al="$(alias_for "$slug")"
   [ "$al" = "-" ] && { printf 'deploy\t%s\t?\tnot checked out under repos/ - read its workflow by hand\n' "$slug"; return; }
 
   wf=""
-  for f in deploy-prod.yml deploy-production.yml deploy.yml; do
+  for f in deploy-prod.yml deploy-production.yml deploy.yml deploy-prod.yaml deploy-production.yaml deploy.yaml; do
     wf="$(repo_path "$al" ".github/workflows/$f")" && [ -n "$wf" ] && break
     wf=""
   done
   if [ -z "$wf" ]; then
-    printf 'deploy\t%s\tnone\tNO WORKFLOW IN THE REPO - the production path is out of band, confirm it by hand\n' "$slug"
+    printf 'deploy\t%s\tnone\tno deploy workflow under a common name - the learned file or the repo says how production ships; confirm it by hand\n' "$slug"
     return
   fi
 
@@ -236,59 +274,80 @@ facts_deploy() {
   case "$on" in *schedule*) trig="${trig:+$trig + }schedule" ;; esac
 
   case "$on" in
-    *push:*main*)  note="merging to main deploys to production" ;;
-    *push:*dev*)   note="deploys to DEV only - no production path in this repo, confirm how prod ships by hand" ;;
+    *push:*main*|*push:*master*) note="merging to the default branch deploys to production" ;;
+    *push:*dev*)   note="deploys to DEV only - no production path in this workflow, confirm how prod ships by hand" ;;
     *workflow_dispatch*) note="manual trigger only - merging does not deploy" ;;
     *) note="read $(basename "$wf") by hand" ;;
   esac
   printf 'deploy\t%s\t%s\t%s\n' "$slug" "$(basename "$wf"): ${trig:-?}" "$note"
 }
 
-# Protos are duplicated across repos, not shared, and already drifting: on
-# 2026-09-03 credit.proto was 482 lines in player, 435 in sport, 327 in backend.
-# A proto change in one repo is silently a release task in its consumers.
-# proto<TAB>org/repo<TAB>path<TAB>other repos carrying a copy (differs?)
+# Contracts copied between repos rather than shared - protos, schemas - drift,
+# and a change in one is silently a release task in every repo holding a copy.
+# A copy is a file of the same name anywhere in another checkout's default
+# branch.
+# proto<TAB>org/repo<TAB>path<TAB>other repos carrying a copy
 facts_proto() {
-  local slug="$1" diff="$2" p base d others other al
+  local slug="$1" diff="$2" p base d others other al ref
   al="$(alias_for "$slug")"
-  changed_files "$diff" | grep -E '\.proto$' | while read -r p; do
+  changed_files "$diff" | grep -E '\.(proto|avsc|thrift)$' | while read -r p; do
     base="$(basename "$p")"
     others=""
     for d in "$ROOT"/repos/*/; do
       [ -e "$d/.git" ] || continue
       other="$(basename "$d")"
       [ "$other" = "$al" ] && continue
-      repo_path "$other" "proto/$base" >/dev/null || continue
+      ref="$(canonical_ref "$other")"
+      git -C "$d" ls-tree -r --name-only "$ref" 2>/dev/null | grep -qE "(^|/)$base\$" || continue
       others="$others $other"
     done
+    others="${others# }"
     printf 'proto\t%s\t%s\t%s\n' "$slug" "$p" "${others:-no other repo carries a copy}"
   done
 }
 
-# Any deeplink a change emits. Ours are checked against the app's own registry
-# of hosts; a third-party scheme (dana://pay, gojek://pay) is reported but not
-# checked, since the app never routes it - it hands it to that wallet.
-#
-# The scheme is configurable and differs per environment (DeepLinkSchemePlayer,
-# default getswing.dev), and fixtures use player://, pos://, swing:// freely -
-# so the scheme says nothing. The HOST is what the app routes on, so that is
-# what is checked. A host the registry knows is one the app can open; anything
-# else is either another app's link or a link nothing will route.
-# deeplink<TAB>org/repo<TAB>scheme://host<TAB>routable|NOT-IN-THE-APPS-REGISTRY
+# The app whose learned file names a route registry: "<alias><TAB><file><TAB><host form>".
+# At most one - an app routes links, services emit them.
+deeplink_registry() {
+  local f al file host
+  for f in "$LEARNED"/*/qa-release-note.md; do
+    [ -f "$f" ] || continue
+    al="$(basename "$(dirname "$f")")"
+    file="$(learned_section "$f" "Deeplink registry" | sed -n 's/^- file: `\([^`]*\)`.*/\1/p' | head -1)"
+    host="$(learned_section "$f" "Deeplink registry" | sed -n 's/^- host: `\([^`]*\)`.*/\1/p' | head -1)"
+    [ -n "$file" ] && [ -n "$host" ] || continue
+    printf '%s\t%s\t%s\n' "$al" "$file" "$host"
+    return 0
+  done
+  return 1
+}
+
+# Any deeplink a change emits, checked against the app's own registry of hosts.
+# The scheme is usually configurable per environment, and fixtures use several,
+# so the scheme says nothing: the HOST is what the app routes on, so that is
+# what is checked. A third-party scheme is reported the same way - the app never
+# routes it, and the reader tells the two apart.
+# deeplink<TAB>org/repo<TAB>scheme://host<TAB>routable|NOT-IN-THE-APPS-REGISTRY|no registry
 facts_deeplink() {
-  local slug="$1" diff="$2" reg link host
-  reg="$(repo_path mobile lib/utils/app_link_route.dart)"
+  local slug="$1" diff="$2" reg="" app file form link host pat
+  if app="$(deeplink_registry)"; then
+    file="$(printf '%s' "$app" | cut -f2)"; form="$(printf '%s' "$app" | cut -f3)"
+    reg="$(repo_path "$(printf '%s' "$app" | cut -f1)" "$file")"
+  fi
   # A deeplink is a custom scheme. Ordinary web URLs in a diff are noise, so
   # http/https and the other standard schemes are excluded rather than matched.
   grep -E '^\+' "$diff" \
     | grep -oE '[a-z][a-z0-9.+-]*://[a-z0-9_-]+' \
-    | grep -vE '^(https?|ftps?|mailto|wss?|file|data|git|ssh|postgres|redis|amqp)://' \
+    | grep -vE '^(https?|ftps?|mailto|wss?|file|data|git|ssh|postgres(ql)?|mysql|mongodb(\+srv)?|redis|amqps?|s3|gs)://' \
     | sort -u | while read -r link; do
       [ -n "$link" ] || continue
       host="${link##*://}"
-      if [ ! -f "$reg" ]; then
-        printf 'deeplink\t%s\t%s\tregistry not readable (mobile not checked out)\n' "$slug" "$link"
-      elif grep -q "'$host'" "$reg" 2>/dev/null; then
+      if [ -z "$reg" ] || [ ! -f "$reg" ]; then
+        printf 'deeplink\t%s\t%s\tno registry learned - /learn qa-release-note <app repo> to check routes\n' "$slug" "$link"
+        continue
+      fi
+      pat="${form//\{host\}/$host}"
+      if grep -qF -- "$pat" "$reg" 2>/dev/null; then
         printf 'deeplink\t%s\t%s\troutable - the app has a route for "%s"\n' "$slug" "$link" "$host"
       else
         printf 'deeplink\t%s\t%s\tNOT-IN-THE-APPS-REGISTRY - another app'"'"'s link, or one nothing routes\n' "$slug" "$link"
@@ -296,43 +355,46 @@ facts_deeplink() {
     done
 }
 
-# Who the change faces. sport names its audience in the path; player only
-# partly; payment not at all - for those the surface must be read off the
-# handler, not the path, and this prints nothing rather than guessing.
+# Who each changed file faces, from the repo's learned `## Surfaces` globs.
+# First matching glob wins. A repo with no learned file gets one `learn`
+# record instead - the audience is never guessed from a folder name.
 # surface<TAB>org/repo<TAB>path<TAB>audience-or-channel
+# learn<TAB>org/repo<TAB>what is missing
 facts_surface() {
-  local slug="$1" diff="$2"
+  local slug="$1" diff="$2" al f rules p glob label hit
+  al="$(alias_for "$slug")"
+  if ! f="$(learned_release "$al")"; then
+    printf 'learn\t%s\tno surfaces learned for this repo - /learn qa-release-note %s, or read the audience off each handler\n' "$slug" "${al/-/<repo>}"
+    return
+  fi
+  rules="$(learned_section "$f" Surfaces | sed -n 's/^- `\([^`]*\)` -> \(.*\)$/\1\t\2/p')"
+  [ -n "$rules" ] || return 0
   changed_files "$diff" | while read -r p; do
-    case "$p" in
-      */delivery/http/admin/*|*/delivery/http/admins/*) printf 'surface\t%s\t%s\tadmin panel\n' "$slug" "$p" ;;
-      */delivery/http/player/*)   printf 'surface\t%s\t%s\tplayer app\n' "$slug" "$p" ;;
-      */delivery/http/pos/*)      printf 'surface\t%s\t%s\tPOS app\n' "$slug" "$p" ;;
-      */delivery/http/public/*)   printf 'surface\t%s\t%s\tpublic API\n' "$slug" "$p" ;;
-      */delivery/http/developer/*) printf 'surface\t%s\t%s\tdeveloper API\n' "$slug" "$p" ;;
-      */delivery/grpc/*)   printf 'surface\t%s\t%s\tgRPC - service to service, QA cannot reach directly\n' "$slug" "$p" ;;
-      */delivery/rmq/*)    printf 'surface\t%s\t%s\tRabbitMQ consumer - reached by an upstream action\n' "$slug" "$p" ;;
-      */delivery/sqs/*)    printf 'surface\t%s\t%s\tSQS consumer - reached by an upstream action\n' "$slug" "$p" ;;
-      */delivery/job/*)    printf 'surface\t%s\t%s\tscheduled job - runs on its own clock\n' "$slug" "$p" ;;
-      */delivery/socket/*) printf 'surface\t%s\t%s\trealtime socket\n' "$slug" "$p" ;;
-      */templates/*email*|*/email/templates/*) printf 'surface\t%s\t%s\temail\n' "$slug" "$p" ;;
-      */templates/*pdf*|*/pdf/templates/*)     printf 'surface\t%s\t%s\tPDF\n' "$slug" "$p" ;;
-      pages/*) printf 'surface\t%s\t%s\tadmin screen /%s\n' "$slug" "$p" \
-                 "$(printf '%s' "$p" | sed -e 's|^pages/||' -e 's|/index\.[jt]sx\?$||' -e 's|\.[jt]sx\?$||')" ;;
-    esac
+    hit=""
+    while IFS="$(printf '\t')" read -r glob label; do
+      [ -n "$glob" ] || continue
+      # shellcheck disable=SC2254 - the glob is the point
+      case "$p" in $glob) hit="$label"; break ;; esac
+    done <<EOF
+$rules
+EOF
+    [ -n "$hit" ] && printf 'surface\t%s\t%s\t%s\n' "$slug" "$p" "$hit"
   done
 }
 
 # ---------------------------------------------------------------- extract --
 
 # The team already writes the QA section, inside test names - it just never
-# leaves the repo. Four patterns, all required:
+# leaves the repo. The forms, all required:
 #
-#   1  ±func Test…            a removed/added pair IS the behaviour change
-#   2  t.Run("…")             already plain English, lifted verbatim
+#   1  ±func Test…            a removed/added pair IS the behaviour change (Go)
+#   2  t.Run("…")             already plain English, lifted verbatim (Go)
 #   3  name: "…"              table case, labelled
-#   4  {"…", …}               table case, POSITIONAL - missed during design and
-#                             it produced a false "no test coverage" report on
-#                             the receipt-wording change. Not optional.
+#   4  {"…", …}               table case, POSITIONAL - once missed, and it
+#                             produced a false "no test coverage" report on a
+#                             wording change. Not optional.
+#   5  it/test/describe("…")  Jest, Vitest, Mocha - plain English already
+#   6  def test_…             pytest, split into words like Go's names
 #
 # test<TAB>org/repo<TAB>+|-<TAB>func|case<TAB>text
 extract_tests() {
@@ -356,21 +418,31 @@ extract_tests() {
   grep -E '^[+-][[:space:]]*\{"[^"]+"[[:space:]]*,' "$diff" \
     | sed -E 's/^([+-])[[:space:]]*\{"([^"]*)".*/\1\t\2/' \
     | awk -F'\t' -v slug="$slug" 'NF==2 && $2 != "" { print "test\t" slug "\t" $1 "\tcase\t" $2 }'
+
+  # 5. it("…") / test("…") / describe("…"), any quote style, .only/.skip/.each included
+  grep -E "^[+-][[:space:]]*(it|test|describe)(\.[a-z]+)?(\([^)]*\))?\([[:space:]]*['\"\`]" "$diff" \
+    | sed -E "s/^([+-])[[:space:]]*(it|test|describe)(\.[a-z]+)?(\([^)]*\))?\([[:space:]]*['\"\`]([^'\"\`]*)['\"\`].*/\1\t\5/" \
+    | awk -F'\t' -v slug="$slug" 'NF==2 && $2 != "" { print "test\t" slug "\t" $1 "\tcase\t" $2 }'
+
+  # 6. pytest functions
+  grep -E '^[+-][[:space:]]*(async[[:space:]]+)?def test_' "$diff" \
+    | sed -E 's/^([+-])[[:space:]]*(async[[:space:]]+)?def test_([A-Za-z0-9_]*).*/\1\t\3/' \
+    | awk -F'\t' -v slug="$slug" 'NF==2 && $2 != "" { gsub(/_/, " ", $2); print "test\t" slug "\t" $1 "\tfunc\t" $2 }'
 }
 
-# A user-visible change with no test assertion is a release risk. On 2026-09-03
-# this found two in sport #1040: the cashback narrowing in order/create.go and
-# the admin booking_statuses filter, neither of which had a test.
+# A user-visible change with no test assertion is a release risk. The first run
+# of this found two in a single PR - a narrowed discount rule and a new admin
+# filter - neither of which had a test.
 # gap<TAB>org/repo<TAB>path
 extract_gaps() {
   local slug="$1" diff="$2" tmp
   tmp="$WORK/gaps.$$"
   changed_files "$diff" > "$tmp.all"
-  grep -E '(_test\.go|_test\.dart|\.test\.[jt]sx?|\.spec\.[jt]sx?)$' "$tmp.all" \
+  grep -E '(_test\.go|_test\.dart|\.test\.[jt]sx?|\.spec\.[jt]sx?|(^|/)test_[^/]*\.py|_test\.py|_spec\.rb)$' "$tmp.all" \
     | sed 's|/[^/]*$||' | sort -u > "$tmp.tested"
 
-  grep -E '\.(go|ts|tsx|js|dart)$' "$tmp.all" \
-    | grep -vE '(_test\.go|_test\.dart|\.test\.[jt]sx?|\.spec\.[jt]sx?)$' \
+  grep -E '\.(go|ts|tsx|js|jsx|dart|py|rb|kt|java)$' "$tmp.all" \
+    | grep -vE '(_test\.go|_test\.dart|\.test\.[jt]sx?|\.spec\.[jt]sx?|(^|/)test_[^/]*\.py|_test\.py|_spec\.rb)$' \
     | grep -vE '(^|/)(vendor|node_modules|dist|mocks?|docs)/' \
     | grep -vE '(\.pb\.go|_mock\.go|\.gen\.go)$' \
     | while read -r p; do
@@ -384,9 +456,9 @@ changed_files() { grep -E '^\+\+\+ b/' "$1" | sed 's|^+++ b/||' | grep -v '^/dev
 # Fetch a PR's diff, restricted to the files the PR actually touches.
 #
 # `gh pr diff` compares the base branch tip with the head, so when the base has
-# moved on it hands back other people's changes too. Measured 2026-09-03:
-# sport #1053 reports 13 changed files, and its diff carried 28 - the extra 15
-# belonged to #1040 and appeared only because `dev` did not have them yet.
+# moved on it hands back other people's changes too. Measured 2026-09-03: a PR
+# reporting 13 changed files carried 28 in its diff - the extra 15 belonged to
+# another PR and appeared only because the base did not have them yet.
 # Extracting from that unfiltered diff credits one PR with another's behaviour
 # changes, which is worse than missing them.
 #
@@ -419,6 +491,17 @@ pr_diff() {
 
 # ------------------------------------------------------------------ report --
 
+# Everything this script can say about one diff without asking gh.
+local_facts() {
+  facts_env        "$1" "$2"
+  facts_migrations "$1" "$2"
+  facts_proto      "$1" "$2"
+  facts_deeplink   "$1" "$2"
+  facts_surface    "$1" "$2"
+  extract_tests    "$1" "$2"
+  extract_gaps     "$1" "$2"
+}
+
 report() {
   local name="$1"; shift
   local url line slug num diff
@@ -441,13 +524,7 @@ report() {
     fi
     kv "diff-lines" "$slug#$num	$(wc -l < "$diff" | tr -d ' ')"
 
-    facts_env       "$slug" "$diff"
-    facts_migrations "$slug" "$diff"
-    facts_proto     "$slug" "$diff"
-    facts_deeplink  "$slug" "$diff"
-    facts_surface   "$slug" "$diff"
-    extract_tests   "$slug" "$diff"
-    extract_gaps    "$slug" "$diff"
+    local_facts "$slug" "$diff"
   done
 
   # One deploy line per repo, not per PR.
@@ -468,7 +545,7 @@ header() {
   kv outfile "release/$TODAY-$name.md"
   prev="$(ls -1 "$RELEASE_DIR"/*.md 2>/dev/null | grep -v 'README\.md$' | sort | tail -1)"
   [ -n "$prev" ] && kv prev "release/$(basename "$prev")"
-  kv note "facts come from gh only - repos/ is stale and cannot be fetched"
+  kv note "release facts come from gh only; repos/ is read at its default branch for architecture"
 }
 
 MODE="${1:-}"
@@ -496,6 +573,11 @@ case "$MODE" in
     fi
     command -v gh >/dev/null 2>&1 || { printf 'error\tgh is not installed\n'; exit 2; }
     if [ "$MODE" = roll-call ]; then roll_call "$@"; else report "$NAME" "$@"; fi
+    ;;
+  facts)
+    [ $# -eq 2 ] && [ -f "$2" ] || { printf 'error\tusage: release-notes.sh facts <org/repo> <diff-file>\n'; exit 2; }
+    WORK="$(mktemp -d "${TMPDIR:-/tmp}/release-notes.XXXXXX")"
+    local_facts "$1" "$2"
     ;;
   slash)
     MODE=roll-call
