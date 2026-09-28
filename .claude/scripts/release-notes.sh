@@ -13,12 +13,13 @@
 # are only as fresh as their last fetch. repos/ is read here only for slow-
 # moving architecture: deploy triggers, proto copies, the deeplink registry.
 #
-# Those architecture reads come from repos/ and NEVER from spaces/. A space is
-# a worktree on somebody's task branch, carrying half-finished and uncommitted
-# work; reading a deploy trigger or a proto out of one describes that task, not
-# the service. repos/ is the canonical checkout, and being read-only is exactly
-# what makes it the right thing to read. Every local read goes through
-# repo_path(), which resolves under repos/ or refuses.
+# Those architecture reads come from a git ref, NEVER from a working tree. A
+# task works on its own branch - in a space's worktree, or in place in
+# repos/<repo> itself - carrying half-finished and uncommitted work; reading a
+# deploy trigger or a proto out of that describes the task, not the service.
+# So every local read goes through repo_path(), which reads the file from the
+# repo's default branch (origin/HEAD) whatever its checkout is on, and refuses
+# anything else.
 #
 # Usage:
 #   release-notes.sh roll-call <name> <pr-url...>   cheap: state, size, checks
@@ -35,6 +36,7 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 RELEASE_DIR="$ROOT/release"
+. "$SCRIPT_DIR/tasklib.sh"
 TODAY="$(date +%Y-%m-%d)"
 
 usage() { sed -n '3,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
@@ -60,28 +62,41 @@ parse_pr() {
     | sed -n 's|^https://github.com/\([^/]*\)/\([^/]*\)/pull/\([0-9][0-9]*\).*$|\1/\2\t\3|p'
 }
 
-# The one chokepoint for reading anything on disk. Takes a repo alias and an
-# optional path under it, and resolves inside repos/ or prints nothing.
-#
-# Everything local goes through here so the "repos/, never spaces/" rule is a
-# property of the script rather than a habit each caller has to remember. A
-# caller that builds its own path is a bug; there is no second way in.
-repo_path() {
-  local al="$1" rel="${2:-}" p dir base real
-  case "$al" in ""|-|*/*|.|..) return 1 ;; esac
-  # A `..` anywhere in the relative part would climb out of repos/ and into
-  # spaces/. Rejecting the segment is not enough on its own, so the resolved
-  # path is checked below too - textual checks on an unresolved path are how
-  # this kind of guard usually leaks.
-  case "/$rel/" in */../*) return 1 ;; esac
-  p="$ROOT/repos/$al${rel:+/$rel}"
-  [ -e "$p" ] || return 1
+# The ref a repo's architecture is read from: its remote default branch, which
+# no task can move. A clone without origin/HEAD falls back to the base commit of
+# the in-place task holding it, if any, and only then to HEAD - which, with no
+# task holding the checkout, is the branch it was cloned on.
+canonical_ref() {
+  local dir="$ROOT/repos/$1" t base
+  if git -C "$dir" rev-parse --verify --quiet refs/remotes/origin/HEAD >/dev/null; then
+    printf '%s' refs/remotes/origin/HEAD; return 0
+  fi
+  if t="$(task_holding "$1")"; then
+    base="$(task_base "$t" "$1")" && { printf '%s' "${base#*	}"; return 0; }
+  fi
+  printf '%s' HEAD
+}
 
-  dir="$(dirname "$p")"; base="$(basename "$p")"
-  real="$(cd "$dir" 2>/dev/null && pwd -P)" || return 1
-  real="$real/$base"
-  case "$real" in "$(cd "$ROOT/repos" && pwd -P)"/*) ;; *) return 1 ;; esac
-  printf '%s' "$p"
+# The one chokepoint for reading anything local. Takes a repo alias and a path
+# inside it, reads that file at canonical_ref, and prints the path of a copy in
+# the scratch directory - or prints nothing if the file is not on that ref.
+#
+# Everything local goes through here so the "a ref, never a working tree" rule
+# is a property of the script rather than a habit each caller has to remember.
+# A caller that builds its own path is a bug; there is no second way in.
+repo_path() {
+  local al="$1" rel="${2:-}" dir ref out
+  case "$al" in ""|-|*/*|.|..) return 1 ;; esac
+  case "/$rel/" in */../*|//) return 1 ;; esac
+  dir="$ROOT/repos/$al"
+  [ -e "$dir/.git" ] || return 1
+  ref="$(canonical_ref "$al")"
+  git -C "$dir" cat-file -e "$ref:$rel" 2>/dev/null || return 1
+  [ -n "$WORK" ] || return 1
+  out="$WORK/ref/$al/$rel"
+  mkdir -p "$(dirname "$out")" || return 1
+  git -C "$dir" show "$ref:$rel" >"$out" 2>/dev/null || return 1
+  printf '%s' "$out"
 }
 
 # Local checkout whose origin matches <org>/<repo>, or "-" when not checked out.

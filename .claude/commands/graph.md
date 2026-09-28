@@ -56,6 +56,7 @@ Rows are `graph<TAB>target<TAB>kind<TAB>state<TAB>built<TAB>files<TAB>nodes`.
 | `stale` | One of those changed | Offer `/graph build <target>`, but only if someone is about to query it. `review` rebuilds on its own |
 | `missing` | Never built | Same |
 | `orphan` | Its task is gone, or no longer holds that repo | Offer `/graph prune` |
+| `held` | An in-place task has this checkout on its branch; the repo graph stays as last built | Nothing - review the task as `<task>/<repo>`, and rebuild the repo after the task finishes |
 
 Do not rebuild everything unasked. A graph nobody queries is not worth refreshing.
 

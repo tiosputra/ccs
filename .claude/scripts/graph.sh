@@ -29,7 +29,8 @@
 # status rows:
 #   graph<TAB>target<TAB>kind<TAB>state<TAB>built<TAB>files<TAB>nodes
 # kind is repo or task. state is fresh, stale (code, uncommitted work or
-# .code-review-graphignore changed since the build), missing, or orphan.
+# .code-review-graphignore changed since the build), missing, orphan, or held -
+# a repo an in-place task has on its branch, whose graph is left as last built.
 #
 # .mcp.json is per machine and gitignored: every build rewrites it with one
 # read-only server per repos/ checkout that has a graph, so it names only the
@@ -236,6 +237,14 @@ json_int()    { sed -n "s/.*\"$1\": \([0-9][0-9]*\).*/\1/p"; }
 build_one() {
   local fp="${2:-}" label="${3:-built}" tmp log json
   resolve "$1" || { printf 'error\t%s\n' "$RESOLVE_ERR"; return 1; }
+  # repos/<repo> held by an in-place task is on that task's branch. Its graph is
+  # the repo's, served over MCP, so it is not rebuilt from someone's unmerged
+  # work; the task's own graph is <task>/<repo>.
+  local held
+  if [ "$T_KIND" = repo ] && held="$(task_holding "$T_NAME")"; then
+    printf 'held\t%s\ton task %s - kept as last built; the task graph is %s/%s\n' "$T_NAME" "$held" "$held" "$T_NAME"
+    return 0
+  fi
   [ -n "$fp" ] || fp="$(fingerprint "$T_DIR")"
   mkdir -p "$(dirname "$T_DATA")" || return 1
   tmp="$T_DATA.building.$$"
@@ -321,6 +330,7 @@ status_row() {
   files="$(stamp_value "$data" files)"; [ -n "$files" ] || files=-
   nodes="$(stamp_value "$data" nodes)"; [ -n "$nodes" ] || nodes=-
   if [ ! -e "$dir/.git" ]; then state=orphan
+  elif [ "$kind" = repo ] && task_holding "$target" >/dev/null; then state=held
   elif [ ! -f "$data/built.tsv" ]; then state=missing
   elif [ "$(stamp_value "$data" fingerprint)" = "$(fingerprint "$dir")" ]; then state=fresh
   else state=stale

@@ -65,8 +65,15 @@ unasked.
 
 ### 2. Scan `repo_dir`, read-only
 
-It is a canonical checkout under `repos/`, readable and never writable. Search,
-read, `git log`; never edit, never generate into it.
+It is the repo's checkout under `repos/`. Search, read, `git log`; never edit,
+never generate into it.
+
+If the result has a `held` line, an in-place task has that checkout on its
+branch, so the working tree carries the task's unmerged work. Learn the repo,
+not the task: where the task has changed a file, read it at the base commit the
+`held` line gives (`git -C <repo_dir> show <sha>:<path>`), and say in your report
+that the scan ran while a task held the repo. The fingerprint is already read at
+that commit.
 
 **Measure, do not estimate.** Every number in the file comes from a command you
 ran in this scan. Say what you searched when the answer is "none found", so a
