@@ -199,6 +199,13 @@ write_meta() {
   } >"$meta"
 }
 
+# The commit a repo's task work is measured from: where the task branch left
+# <ref>. For a new branch that is HEAD; for a reused one - a re-join for review
+# fixes - it is the merge-base, so the task's earlier commits still count.
+base_sha() {
+  git -C "$1" merge-base HEAD "$2" 2>/dev/null || git -C "$1" rev-parse HEAD
+}
+
 # record_base <task> <repo> <ref> <sha> - a repo has joined the task. The
 # metadata is written with the first repo that actually joins, never before,
 # so a start that fails everywhere leaves nothing behind. A task that already
@@ -258,7 +265,7 @@ start_space_repo() {
   mkdir -p "$SPACES_DIR/$task"
   if git -C "$dir" worktree add "${add_args[@]}" >/dev/null 2>&1; then
     ok "$repo  ${C_DIM}$(git -C "$wt" rev-parse --short HEAD) from $base${C_RESET}"
-    record_base "$task" "$repo" "$base" "$(git -C "$wt" rev-parse HEAD)"
+    record_base "$task" "$repo" "$base" "$(base_sha "$wt" "$base")"
     [ "$do_env" -eq 1 ] && copy_env_files "$dir" "$wt"
     return 0
   fi
@@ -267,8 +274,59 @@ start_space_repo() {
   return 1
 }
 
+# The branch a checkout is on, or its commit when detached.
+checkout_head() {
+  git -C "$1" symbolic-ref --short -q HEAD 2>/dev/null || git -C "$1" rev-parse HEAD
+}
+
+# In place: the repo's own checkout switches to the task branch. A checkout is
+# busy when another in-place task holds it, or when it has uncommitted work -
+# switching would carry that work onto this task's branch. Busy is refused and
+# pointed at --space; the task's layout is never changed here.
 start_inplace_repo() {
-  die "in-place tasks are not available yet - start it with --space"
+  local task="$1" repo="$2" branch="$3" base="$4" do_fetch="$5" dry="$6"
+  local dir="$REPOS_DIR/$repo" holder cur how from sw=()
+
+  if holder="$(task_holding "$repo")" && [ "$holder" != "$task" ]; then
+    fail "$repo  held in place by task '$holder' - one in-place task per repo; start this one with --space"
+    return 1
+  fi
+  cur="$(checkout_head "$dir")"
+  if [ "$cur" = "$branch" ] && task_has_repo "$task" "$repo"; then
+    skip "$repo  already on $branch"
+    return 0
+  fi
+  if [ -n "$(git -C "$dir" status --porcelain 2>/dev/null)" ]; then
+    fail "$repo  repos/$repo has uncommitted changes - clean it, or start this task with --space"
+    return 1
+  fi
+
+  how="$(start_args "$dir" "$branch" "$base" "$do_fetch")" \
+    || { fail "$repo  base ref '$base' not found"; return 1; }
+  from="${how#*	}"
+  case "${how%%	*}" in
+    existing) sw=("$branch"); dim "$repo  reusing existing local branch" ;;
+    track)    sw=(--track -c "$branch" "$from"); dim "$repo  tracking existing $from" ;;
+    new)      sw=(-c "$branch" "$from") ;;
+  esac
+
+  if [ "$dry" -eq 1 ]; then
+    ok "$repo  git -C repos/$repo switch ${sw[*]}   (from $cur)"
+    return 0
+  fi
+  if ! git -C "$dir" switch -q "${sw[@]}" 2>/dev/null; then
+    fail "$repo  switch to $branch failed"
+    git -C "$dir" switch "${sw[@]}" 2>&1 | sed 's/^/      /' >&2 || true
+    return 1
+  fi
+  # A repo already in the task was moved off its branch and is being put back:
+  # its base and home are recorded from the first time it joined.
+  if ! task_has_repo "$task" "$repo"; then
+    record_base "$task" "$repo" "$base" "$(base_sha "$dir" "$base")"
+    # Where the checkout was, so finish can put it back.
+    printf 'home\t%s\t%s\n' "$repo" "$cur" >>"$(task_meta "$task")"
+  fi
+  ok "$repo  ${C_DIM}$(git -C "$dir" rev-parse --short HEAD) from $base, repos/$repo was on $cur${C_RESET}"
 }
 
 cmd_start() {
@@ -560,8 +618,46 @@ finish_space_repo() {
   fi
 }
 
+# In place: put the checkout back on the branch it was on before the task.
+# A checkout someone already moved off the task branch is left where it is.
 finish_inplace_repo() {
-  die "in-place tasks are not available yet"
+  local task="$1" repo="$2" del_branch="$3" force="$4"
+  local dir="$REPOS_DIR/$repo" branch cur home sw=() left
+  branch="$(task_branch "$task")"
+  home="$(awk -F'\t' -v r="$repo" '$1=="home" && $2==r {print $3; exit}' "$(task_meta "$task")")"
+  if [ -z "$home" ]; then
+    home="$(git -C "$dir" symbolic-ref --short -q refs/remotes/origin/HEAD 2>/dev/null)"
+    home="${home#origin/}"
+    [ -n "$home" ] || home=main
+  fi
+  cur="$(checkout_head "$dir")"
+
+  if [ "$cur" != "$branch" ]; then
+    warn "$repo  is on $cur, not $branch - left as it is"
+  else
+    case "$home" in
+      *[!0-9a-f]*) sw=("$home") ;;
+      *)           sw=(--detach "$home") ;;
+    esac
+    [ "$force" -eq 1 ] && sw=(--discard-changes "${sw[@]}")
+    if ! git -C "$dir" switch -q "${sw[@]}" 2>/dev/null; then
+      fail "$repo  could not switch repos/$repo back to $home"
+      git -C "$dir" switch "${sw[@]}" 2>&1 | sed 's/^/      /' >&2 || true
+      return 1
+    fi
+    ok "$repo  repos/$repo back on $home"
+    left="$(git -C "$dir" status --porcelain 2>/dev/null | grep -c '^??' || true)"
+    [ "${left:-0}" -gt 0 ] && warn "$repo  $left untracked file(s) from the task remain in repos/$repo"
+  fi
+
+  if [ "$del_branch" -eq 1 ]; then
+    if git -C "$dir" branch -D "$branch" >/dev/null 2>&1; then
+      dim "$repo  deleted branch $branch (local only)"
+    else
+      warn "$repo  could not delete branch $branch"
+    fi
+  fi
+  return 0
 }
 
 cmd_finish() {

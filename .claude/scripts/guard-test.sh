@@ -33,16 +33,17 @@ QUIET=0
 pass=0
 fail=0
 
-# payload <tool> <key> <value> - a hook payload as JSON, cwd pinned to ROOT.
+# payload <tool> <key> <value> - a hook payload as JSON, cwd pinned to CWD
+# (ROOT unless a case says otherwise).
 payload() {
   python3 -c 'import json,sys; print(json.dumps({"tool_name":sys.argv[1],"cwd":sys.argv[2],"tool_input":{sys.argv[3]:sys.argv[4]}}))' \
-    "$1" "$ROOT" "$2" "$3"
+    "$1" "${CWD:-$ROOT}" "$2" "$3"
 }
 
 check() { # check <expect> <tool> <key> <value>
   local expect="$1" json got rc
   json="$(payload "$2" "$3" "$4")"
-  printf '%s' "$json" | "$GUARD" >/dev/null 2>&1
+  printf '%s' "$json" | "${G:-$GUARD}" >/dev/null 2>&1
   rc=$?
   got=allow
   [ "$rc" -eq 2 ] && got=block
@@ -50,7 +51,7 @@ check() { # check <expect> <tool> <key> <value>
     pass=$((pass + 1))
   else
     fail=$((fail + 1))
-    [ "$QUIET" -eq 1 ] || printf 'FAIL\twant=%s\tgot=%s\t%s\n' "$expect" "$got" "$4"
+    [ "$QUIET" -eq 1 ] || printf 'FAIL\twant=%s\tgot=%s\t%s%s\n' "$expect" "$got" "$4" "${CWD:+  (cwd ${CWD#"${FIX:-$ROOT}"/})}"
   fi
 }
 
@@ -178,6 +179,111 @@ sh_case allow 'cd spaces/some-task/mobile && ls 2>/dev/null'
 sh_case allow 'cd spaces/some-task/mobile && npm ls > /tmp/out.txt'
 sh_case allow 'git -C spaces/some-task/mobile-app commit -m x'
 sh_case allow 'echo "spaces/t/backend -> spaces/t/mobile"'
+
+# --- file commands judge the paths they name, not words that look like one -
+sh_case allow 'mkdir -p "$SP/ws/repos" "$SP/ws/spaces"'
+sh_case allow 'mkdir -p /tmp/scratch/repos/api'
+sh_case allow 'rm -rf myrepos/x'
+sh_case allow "cp $ROOT/spaces/t/api/a.txt /tmp/a.txt"
+sh_case block 'rm -rf ./repos/backend/x'
+sh_case block 'cp /tmp/a.txt repos/backend/a.txt'
+sh_case block "touch $ROOT/repos/backend/f"
+sh_case block 'rm -rf repos'
+
+# --- plain commands run where the session is -----------------------------
+# A `git commit` with no cd, from a session already inside a sealed checkout,
+# is the same write as `cd repos/<repo> && git commit`.
+CWD="$ROOT/repos/backend" sh_case block 'git commit -m x'
+CWD="$ROOT/repos/backend" sh_case block 'git switch -c mine'
+CWD="$ROOT/repos/backend" sh_case block 'echo hi > f.txt'
+CWD="$ROOT/repos/backend" sh_case block 'rm -rf src'
+CWD="$ROOT/repos/backend" sh_case allow 'git status'
+CWD="$ROOT/repos/backend" sh_case allow 'git log --oneline -3 2>/dev/null'
+CWD="$ROOT/repos/backend" sh_case allow 'grep -rn foo src > /tmp/hits.txt'
+CWD="$ROOT/spaces/t/backend" sh_case allow 'git commit -m x'
+
+# --- in-place tasks: a checkout a task holds -------------------------------
+# Ownership reads files - each checkout's HEAD and the task metadata - so these
+# run against a fixture workspace with its own copy of the guard.
+FIX="$(mktemp -d "${TMPDIR:-/tmp}/guard-test.XXXXXX")"
+trap 'rm -rf "$FIX"' EXIT
+mkdir -p "$FIX/.claude/scripts" "$FIX/.claude/state/tasks" "$FIX/gitdirs/wt"
+cp "$SCRIPT_DIR/guard.sh" "$SCRIPT_DIR/config.sh" "$FIX/.claude/scripts/"
+FIX="$(cd "$FIX" && pwd -P)"
+head_on() { mkdir -p "$FIX/repos/$1/.git"; printf 'ref: refs/heads/%s\n' "$2" >"$FIX/repos/$1/.git/HEAD"; }
+head_on owned    me/t1       # t1 holds it: HEAD on me/t1 and listed in t1
+head_on other    main        # no task
+head_on handmade me/t2       # a task-looking branch nobody recorded
+head_on spaced   me/t3       # its task is a space, not in place
+head_on mobile   me/t1       # reference-only, whatever t1 says
+mkdir -p "$FIX/repos/wt"; printf 'gitdir: ../../gitdirs/wt\n' >"$FIX/repos/wt/.git"
+printf 'ref: refs/heads/me/t1\n' >"$FIX/gitdirs/wt/HEAD"
+printf 'task\tt1\nisolation\tinplace\nbranch\tme/t1\nbase\towned\torigin/main\tabc\nbase\twt\torigin/main\tabc\nbase\tmobile\torigin/main\tabc\n' \
+  >"$FIX/.claude/state/tasks/t1"
+printf 'task\tt3\nisolation\tspace\nbranch\tme/t3\nbase\tspaced\torigin/main\tabc\n' >"$FIX/.claude/state/tasks/t3"
+
+G="$FIX/.claude/scripts/guard.sh"
+CWD="$FIX"
+wr_case allow repos/owned/src/x.ts
+wr_case allow "$FIX/repos/owned/README.md"
+wr_case allow repos/wt/src/x.ts
+wr_case block repos/owned
+wr_case block repos/owned/.git/config
+wr_case block repos/other/src/x.ts
+wr_case block repos/handmade/src/x.ts
+wr_case block repos/spaced/src/x.ts
+wr_case block repos/mobile/src/x.ts
+sh_case allow 'echo hi > repos/owned/f.txt'
+sh_case allow 'rm -rf repos/owned/build'
+sh_case allow 'sed -i "" s/a/b/ repos/owned/src/x.ts'
+sh_case block 'rm -rf repos/owned'
+sh_case block 'rm -rf repos/owned/.git'
+sh_case block 'echo hi > repos/other/f.txt'
+sh_case block 'rm -rf repos/other/build'
+sh_case allow 'git -C repos/owned add -A'
+sh_case allow 'git -C repos/owned commit -m "fix: x"'
+sh_case allow 'git -C repos/owned push'
+sh_case allow 'git -C repos/owned push -u origin me/t1'
+sh_case allow 'git -C repos/owned push origin HEAD'
+sh_case allow 'git -C repos/owned push --force-with-lease origin me/t1'
+sh_case allow 'git -C repos/owned push origin refs/heads/me/t1'
+sh_case allow 'git -C repos/owned log --oneline -5'
+sh_case allow 'git -C repos/owned fetch origin'
+sh_case allow 'cd repos/owned && git add -A && git commit -m x && git push -u origin me/t1'
+sh_case block 'git -C repos/owned push origin main'
+sh_case block 'git -C repos/owned push origin me/t1:main'
+sh_case block 'git -C repos/owned push origin HEAD:main'
+sh_case block 'git -C repos/owned push --all'
+sh_case block 'git -C repos/owned push origin --delete me/t1'
+sh_case block 'git -C repos/owned push origin :me/t1'
+sh_case block 'git -C repos/owned checkout main'
+sh_case block 'git -C repos/owned switch main'
+sh_case block 'git -C repos/owned reset --hard HEAD~1'
+sh_case block 'git -C repos/owned rebase origin/main'
+sh_case block 'git -C repos/owned pull'
+sh_case block 'git -C repos/owned merge origin/main'
+sh_case block 'git -C repos/owned branch -D old'
+sh_case block 'cd repos/owned && git add -A && git push origin main'
+sh_case block 'git -C repos/other commit -m x'
+sh_case block 'git -C repos/handmade commit -m x'
+sh_case block 'git -C repos/mobile commit -m x'
+CWD="$FIX/repos/owned" sh_case allow 'git commit -m x'
+CWD="$FIX/repos/owned" sh_case allow 'echo hi > f.txt'
+CWD="$FIX/repos/owned" sh_case allow 'rm -rf build'
+CWD="$FIX/repos/owned" sh_case block 'git switch main'
+CWD="$FIX/repos/owned" sh_case block 'git push origin main'
+CWD="$FIX/repos/other" sh_case block 'git commit -m x'
+CWD="$FIX/repos/other" sh_case allow 'git status'
+# The task moved off: HEAD no longer on the task branch, so the checkout seals.
+head_on owned main
+sh_case block 'git -C repos/owned commit -m x'
+wr_case block repos/owned/src/x.ts
+# Unreadable metadata fails closed.
+head_on owned me/t1
+chmod 000 "$FIX/.claude/state/tasks/t1"
+wr_case block repos/owned/src/x.ts
+chmod 644 "$FIX/.claude/state/tasks/t1"
+unset G CWD
 
 # --- a malformed payload must never brick the session ----------------------
 for bad in 'not json at all' '{}' '{"tool_name":"Bash"}' '{"tool_name":"Write","tool_input":{}}'; do

@@ -380,9 +380,20 @@ check_artifacts() {
       continue
     fi
     for repo in $(task_repos "$task"); do
-      [ -e "$(task_workdir "$task" "$repo")/.git" ] && continue
-      finding med artifacts "task '$task' lists $repo, but its working directory is gone"
-      bad=$((bad + 1))
+      if [ ! -e "$(task_workdir "$task" "$repo")/.git" ]; then
+        finding med artifacts "task '$task' lists $repo, but its working directory is gone"
+        bad=$((bad + 1))
+        continue
+      fi
+      # An in-place task holds a checkout only while it is on the task branch;
+      # moved by hand, the guard seals it and the task cannot write there.
+      [ "$(task_isolation "$task")" = inplace ] || continue
+      local on
+      on="$(git -C "$ROOT/repos/$repo" symbolic-ref --short -q HEAD 2>/dev/null || echo detached)"
+      if [ "$on" != "$(task_branch "$task")" ]; then
+        finding med artifacts "repos/$repo is on '$on', not task '$task''s branch - the task no longer holds it, so the guard seals it; task.sh start $task $repo puts it back"
+        bad=$((bad + 1))
+      fi
     done
   done
   [ "$bad" -eq 0 ] && ok artifacts "every task doc sits in docs/<date>_<task>/ under a standard or supporting name, logs trace back to PRDs, no orphan tasks"
