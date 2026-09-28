@@ -50,3 +50,7 @@
 .env
 # code-review-graph data - rebuilt from the code on demand by .claude/scripts/graph.sh.
 /.code-review-graph/
+
+# MCP servers for this machine's checkouts - graph.sh rewrites it on every build,
+# so it names only the services cloned here.
+/.mcp.json
