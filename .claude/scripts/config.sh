@@ -26,10 +26,12 @@ CFG_FILE="$CFG_ROOT/.env"
 CFG_SOURCES=""
 
 # One key's value from .env, unquoted and trimmed. Last assignment wins.
+# A key .env does not set is an empty value, not a failure: the callers run
+# under `set -e -o pipefail`, where a grep that matches nothing ends the script.
 cfg_file_value() {
   [ -f "$CFG_FILE" ] || return 0
   sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$CFG_FILE" \
-    | grep -v '^#' | tail -1 \
+    | { grep -v '^#' || true; } | tail -1 \
     | sed -e 's/[[:space:]]*#.*$//' -e 's/^"//' -e 's/"$//' \
           -e "s/^'//" -e "s/'\$//" -e 's/[[:space:]]*$//'
 }
