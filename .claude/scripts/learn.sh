@@ -43,7 +43,7 @@ rel()   { printf '%s\n' "${1#"$ROOT"/}"; }
 
 # ------------------------------------------------------------------- repos --
 
-# The same rule as space.sh: a comma list of aliases, whitespace ignored.
+# The same rule as task.sh: a comma list of aliases, whitespace ignored.
 is_reference_repo() {
   case ",${REFERENCE_REPOS//[[:space:]]/}," in *",$1,"*) return 0 ;; esac
   return 1

@@ -11,15 +11,16 @@
 #
 # Precedence, highest first:
 #
-#   1. the environment    SPACE_BRANCH_PREFIX=x space.sh add …   (one-off)
+#   1. the environment    TASK_BRANCH_PREFIX=x task.sh start …   (one-off)
 #   2. .env               your standing preference
 #   3. the built-in       what someone with no .env gets
 #
 # Usage from a script:
 #
 #   . "$SCRIPT_DIR/config.sh"
-#   cfg_resolve SPACE_BRANCH_PREFIX ccs
-#   echo "$SPACE_BRANCH_PREFIX came from $(cfg_source SPACE_BRANCH_PREFIX)"
+#   cfg_resolve REFERENCE_REPOS ""
+#   cfg_resolve_renamed TASK_BRANCH_PREFIX SPACE_BRANCH_PREFIX ccs
+#   echo "$TASK_BRANCH_PREFIX came from $(cfg_source TASK_BRANCH_PREFIX)"
 
 CFG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CFG_FILE="$CFG_ROOT/.env"
@@ -49,6 +50,35 @@ cfg_resolve() {
   if [ -n "$val" ]; then
     eval "$name=\"\$val\""
     CFG_SOURCES="$CFG_SOURCES$name	.env
+"
+  else
+    eval "$name=\"\$fallback\""
+    CFG_SOURCES="$CFG_SOURCES$name	built-in default
+"
+  fi
+}
+
+# cfg_resolve_renamed <NAME> <OLD_NAME> <fallback> - as cfg_resolve, for a
+# setting that was renamed. The new name wins at every layer; the old name is
+# still honoured, from the environment or .env, before the built-in default.
+# cfg_source then reports e.g. ".env (as OLD_NAME)" so /task config shows
+# which spelling a machine still uses.
+cfg_resolve_renamed() {
+  local name="$1" old="$2" fallback="$3" cur val
+  cfg_resolve "$name" ""
+  eval "cur=\${$name:-}"
+  [ -n "$cur" ] && return 0
+  eval "val=\${$old:-}"
+  if [ -n "$val" ]; then
+    eval "$name=\"\$val\""
+    CFG_SOURCES="$CFG_SOURCES$name	environment (as $old)
+"
+    return 0
+  fi
+  val="$(cfg_file_value "$old")"
+  if [ -n "$val" ]; then
+    eval "$name=\"\$val\""
+    CFG_SOURCES="$CFG_SOURCES$name	.env (as $old)
 "
   else
     eval "$name=\"\$fallback\""

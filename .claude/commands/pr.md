@@ -1,5 +1,5 @@
 ---
-description: "Stage, commit, push and open a pull request for a task's space — one PR per repo, based on the branch the space came from"
+description: "Stage, commit, push and open a pull request for a task — one PR per repo, based on the branch the task started from"
 argument-hint: "[task] [base-branch] [--draft]"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
 ---
@@ -12,34 +12,36 @@ command turns it into pull requests.
 **Input**: `$ARGUMENTS` — all optional.
 
 - a **task name**, if the session isn't already working one
-- a **base branch**, overriding the branch the space was created from
+- a **base branch**, overriding the branch the task started from
 - `--draft`
 
 ---
 
-## Phase 0 — RESOLVE THE SPACE
+## Phase 0 — RESOLVE THE TASK
 
-A PR is per repo, but work is per space, so resolve the space first.
+A PR is per repo, but work is per task, so resolve the task first.
 
 ```bash
-.claude/scripts/space.sh report <task>
+.claude/scripts/task.sh report <task>
 ```
 
 If no task was given, use the one this session has been working. If the session has none
-and there is more than one space, run `.claude/scripts/space.sh list` and ask which.
+and more than one task is open, run `.claude/scripts/task.sh list` and ask which.
 
-From the report take, per repo: `branch`, `base`, `uncommitted`, `unpushed`, and the
-changed files. **The `base` line is the PR base** — that is the branch the space was
-created from, and defaulting to `main` instead would open a PR against the wrong branch.
+From the report take, per repo: `workdir`, `branch`, `base`, `uncommitted`, `unpushed`, and
+the changed files. **The `base` line is the PR base** — that is the branch the task
+started from, and defaulting to `main` instead would open a PR against the wrong branch.
 Strip the remote prefix for `gh`: `origin/feature/m5.1` becomes `feature/m5.1`. A base
 branch in `$ARGUMENTS` overrides it.
 
-Build the repo list: every repo in the space with `uncommitted > 0` or `unpushed > 0`.
+Build the repo list: every repo in the task with `uncommitted > 0` or `unpushed > 0`.
 Repos with nothing to ship are skipped and reported as skipped. If no repo has anything,
 stop and say so — there is no PR to open.
 
-Everything from here runs **once per repo in that list**, from inside
-`spaces/<task>/<repo>/`.
+Everything from here runs **once per repo in that list**, from inside that repo's
+`workdir` — the report prints it, and so does `task.sh where <task> <repo>`. For an
+in-place task it is `repos/<repo>`, which the guard lets you commit in only while the
+task holds it, and only to push the task branch.
 
 ---
 
@@ -49,7 +51,7 @@ Per repo:
 
 | Check | Condition | Action if failed |
 |---|---|---|
-| On the space's branch | `git branch --show-current` = `<prefix>/<task>` | Stop: report the actual branch, do not switch |
+| On the task's branch | `git branch --show-current` = `<prefix>/<task>` | Stop: report the actual branch, do not switch |
 | Base branch exists | `git rev-parse --verify origin/<base>` succeeds | Stop: name the missing ref |
 | Not based on itself | Current branch ≠ base | Stop: "branch and base are the same" |
 | No existing PR | `gh pr list --head <branch> --json number` is empty | Report the existing PR number; push to it instead of creating a second |
@@ -61,8 +63,9 @@ Per repo:
 
 ### Never stage an env file
 
-`space.sh` copies `.env`, `.env.local`, `.env.development`, and `.env.*.local` into every
-worktree so services can boot. They are untracked, so a bare `git add .` would commit
+A working directory holds env files either way: `task.sh` copies `.env`, `.env.local`,
+`.env.development`, and `.env.*.local` into every space worktree so services can boot, and
+an in-place checkout has its own. They are untracked, so a bare `git add .` would commit
 them. Before staging, list what is actually untracked:
 
 ```bash
@@ -88,10 +91,10 @@ Search in order, first hit wins:
 ```bash
 git status --short
 git diff --stat
-git diff <base-sha>..HEAD --stat        # if the space already has commits
+git diff <base-sha>..HEAD --stat        # if the task already has commits
 ```
 
-Use the space report's `base` commit as the diff floor so the analysis covers committed
+Use the task report's `base` commit as the diff floor so the analysis covers committed
 and uncommitted work together. Categorise changed files: source, tests, docs, config,
 migrations.
 
@@ -111,13 +114,13 @@ ls -d docs/*_<task>/          # the date prefix is the day the task opened
 - `docs/<date>_<task>/api-contract.md` — what consumers see change, if the task changed a boundary
 
 These are workspace files, not repo files: read them from the workspace root, never from
-inside the worktree, and never stage them. The evidence in particular **does not travel
+inside the working directory, and never stage them. The evidence in particular **does not travel
 with the PR** — no reviewer can open `testing.md` from GitHub — so the PR body's Testing
 section has to carry the evidence itself. Lift that repo's section out of `testing.md`:
 what is guaranteed, and the commands that prove it. A link alone is not enough.
 
 The API contract travels the same way and for a sharper reason: its readers are the
-frontend and mobile engineers reviewing this PR, and they cannot open a workspace path.
+consumer engineers reviewing this PR, and they cannot open a workspace path.
 If `api-contract.md` exists and this repo is the provider, lift the entries this PR
 implements into the body — the shapes, the nullability, and the error codes, not a
 summary of them.
@@ -126,7 +129,7 @@ summary of them.
 
 ## Phase 3 — COMMIT
 
-This is where the work becomes commits. Per repo, from its worktree root:
+This is where the work becomes commits. Per repo, from its working directory:
 
 ```bash
 git add -A -- . ':(exclude).env*' ':(exclude)*.pem' ':(exclude)*.key'
@@ -261,7 +264,7 @@ with a conventional-commit prefix.
 
 ### Multi-repo tasks
 
-A space spanning several repos produces **one PR per repo**. Open them all, then edit each
+A task spanning several repos produces **one PR per repo**. Open them all, then edit each
 body to link its siblings so a reviewer can see the set:
 
 ```bash
@@ -302,8 +305,13 @@ Not staged: <.env files excluded>, if any
 Next:
   gh pr view <number> --web
   /code-review <number>
-  /space remove <task>        after the PRs merge — writes the wrap-up log first
+  /task finish <task>         writes the wrap-up log first, then releases the working directories
 ```
+
+An in-place task keeps each `repos/<repo>` on its branch until it finishes, and a repo takes
+one in-place task at a time. Say so in the output when that is the case: finishing once the
+PRs are open frees the checkout, the pushed branch stays on the remote, and
+`/task start <task> <repo>` picks it up again for review fixes.
 
 ---
 
@@ -317,5 +325,5 @@ Next:
   creating a duplicate.
 - **Large PR (>20 files)**: note the size and, if the changes separate cleanly, say how —
   but still open it. Splitting is the user's call.
-- **Repo is not in the space**: never `cd` into `repos/`. That is the read-only origin and
-  the guard hook will block it; the PR comes from the worktree.
+- **Repo is not in the task**: never commit in a checkout the task does not hold. The guard
+  refuses it; add the repo with `/task start <task> <repo>` first, which is the user's call.

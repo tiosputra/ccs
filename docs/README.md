@@ -7,9 +7,9 @@ docs/<YYYY-MM-DD>_<task>/
 ├── prd.md        the requirements, written by /plan-prd and confirmed at Gate 1
 ├── plan.md       the implementation plan for milestone 1, written by /plan
 ├── plan-m2.md    one more file per later milestone: plan-m2.md, plan-m3.md, ...
-├── api-contract.md  what consumers see change, read by frontend and mobile
+├── api-contract.md  what consumers see change, read by the consumer teams
 ├── testing.md    the RED/GREEN evidence, one section per repo the task touched
-├── log.md        the wrap-up note, written from `space.sh report` before teardown
+├── log.md        the wrap-up note, written from `task.sh report` before the task finishes
 └── <anything>    supporting files: a backfill .sql, a .csv export, request examples
 ```
 
@@ -19,8 +19,9 @@ thing not to write is a renamed copy of a standard artifact — `plan-v2.md`,
 `testing-backend.md` — which no command will ever read.
 
 The date is the day the task **opened** — the day its PRD was written — and never
-changes afterwards. The task name is the same kebab-case word used for the space,
-the branch, and every artifact: `spaces/<task>/`, `<prefix>/<task>`.
+changes afterwards. The task name is the same kebab-case word used for the branch
+and every artifact: `<prefix>/<task>`, and `spaces/<task>/` for a task started with
+`--space`.
 
 Because the date is not derivable from the task name, find a task's directory by
 globbing rather than guessing:

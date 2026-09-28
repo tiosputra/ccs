@@ -67,7 +67,7 @@ wr_case allow "$ROOT/repos/README.md"
 wr_case block repos/README.md.bak
 wr_case block repos/README.mdx
 wr_case allow spaces/some-task/backend/src/x.ts
-wr_case allow .claude/scripts/space.sh
+wr_case allow .claude/scripts/task.sh
 
 # --- a redirect after `cd repos/` only counts if it lands in repos/ ---------
 sh_case allow 'cd repos/backend && ls 2>/dev/null'

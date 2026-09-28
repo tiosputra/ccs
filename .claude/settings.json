@@ -1,13 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "Bash(bash -n .claude/scripts/space.sh)",
-      "Bash(.claude/scripts/space.sh -h)",
-      "Bash(.claude/scripts/space.sh slash *)",
-      "Bash(.claude/scripts/space.sh list)",
-      "Bash(.claude/scripts/space.sh list *)",
-      "Bash(.claude/scripts/space.sh report *)",
-      "Bash(.claude/scripts/space.sh add *)",
+      "Bash(bash -n .claude/scripts/task.sh)",
+      "Bash(.claude/scripts/task.sh -h)",
+      "Bash(.claude/scripts/task.sh slash *)",
+      "Bash(.claude/scripts/task.sh list)",
+      "Bash(.claude/scripts/task.sh list *)",
+      "Bash(.claude/scripts/task.sh where *)",
+      "Bash(.claude/scripts/task.sh root)",
+      "Bash(.claude/scripts/task.sh report *)",
+      "Bash(.claude/scripts/task.sh start *)",
+      "Bash(bash -n .claude/scripts/tasklib.sh)",
       "Bash(.claude/scripts/ccs.sh:*)",
       "Bash(bash -n .claude/scripts/ccs.sh)",
       "Bash(.claude/scripts/learn.sh:*)",

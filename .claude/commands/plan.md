@@ -1,7 +1,7 @@
 ---
-description: Restate requirements, assess risks, and create step-by-step implementation plan for a task's space. WAIT for user CONFIRM before touching any code.
+description: Restate requirements, assess risks, and create step-by-step implementation plan for a task. WAIT for user CONFIRM before touching any code.
 argument-hint: "[task description | docs/<YYYY-MM-DD>_<task>/prd.md]"
-allowed-tools: Bash(.claude/scripts/space.sh:*), Read, Write, Edit, Glob, Grep
+allowed-tools: Bash(.claude/scripts/task.sh:*), Read, Write, Edit, Glob, Grep
 ---
 
 # Plan Command
@@ -12,7 +12,7 @@ Run inline by default. Do not call the Task tool or any subagent by default. Thi
 
 ## What This Command Does
 
-0. **Bind the task** - resolve which space this plan is for, and confirm it exists
+0. **Bind the task** - resolve which task this plan is for, and confirm it has started
 1. **Restate Requirements** - Clarify what needs to be built
 2. **Identify Risks** - Surface potential issues and blockers
 3. **Create Step Plan** - Break down implementation into phases
@@ -30,49 +30,54 @@ Use `/plan` when:
 
 ## Step 0: Bind the Task
 
-A plan is only valid for one task's space. Resolve the binding before anything else.
+A plan is only valid for one task. Resolve the binding before anything else.
 
 **From a PRD** (`docs/<YYYY-MM-DD>_<task>/prd.md`): read its `## Task` table. That gives
-the task name, repos, branch, and source branch. Confirm the space is really there:
+the task name, isolation, repos, branch, and source branch. Confirm the task has started,
+and get its working directories and base commits:
 
 ```bash
-.claude/scripts/space.sh list <task>
+.claude/scripts/task.sh where <task>      # repo<TAB>working directory
+.claude/scripts/task.sh report <task>     # branch and base commit per repo
+.claude/scripts/task.sh root              # the workspace root, for the Handoff
 ```
 
 **Without a PRD** (free-form text): derive a kebab-case `<task>` name from the request,
-run `.claude/scripts/space.sh list` to see whether that space already exists, and:
+run `.claude/scripts/task.sh list` to see whether that task is already open, and:
 
-- If it exists, use it, and read `spaces/<task>/.space` for the recorded branch and base.
-- If it does not, ask the user for the **repos** and the **source branch**, then open it:
+- If it is, use it as it is - its repos, its isolation, its recorded base.
+- If it is not, ask the user for the **repos** and the **source branch**, and whether it
+  needs a space, then start it:
 
   ```bash
-  .claude/scripts/space.sh add <task> <repos> --from <source-branch>
+  .claude/scripts/task.sh start <task> <repos> --from <source-branch>   # plus --space for a space
   ```
 
   The source branch is required. Never default it to `origin/main` on the user's behalf.
 
-Once bound, the session works only in that space. Every path in the plan starts with
-`spaces/<task>/<repo>/`. A plan that names a path under `repos/` is wrong — `repos/` is
-read-only (see `CLAUDE.md`); rewrite it before presenting the plan.
+Once bound, the session works only in that task's working directories, exactly as
+`task.sh where` prints them - `repos/<repo>` for an in-place task, `spaces/<task>/<repo>`
+for a space. Never build one by hand, and never plan a write into a checkout the task
+does not hold: the guard refuses it (see `CLAUDE.md`).
 
-If the work turns out to need a service that is not in the space, stop and say so.
-Adding it is `/space add <task> <repo>` — the user's call, not an assumption.
+If the work turns out to need a repo that is not in the task, stop and say so.
+Adding it is `/task start <task> <repo>` — the user's call, not an assumption.
 
-### This command is where space knowledge stops
+### This command is where task layout stops
 
-Spaces are decided here and in `/plan-prd`. Everything downstream — the `tdd-workflow`
-skill, the reviewer agents, the pattern skills — is deliberately space-blind: they know
-only a **working directory** and, where it matters, a **base ref**. So the plan must spell
-both out. Hand down a path, never a task name, and never make a skill go looking for a
-space of its own.
+Where a task's work lives is decided here and in `/plan-prd`. Everything downstream — the
+`tdd-workflow` skill, the reviewer agents, the pattern skills — is deliberately
+layout-blind: they know only a **working directory** and, where it matters, a **base
+ref**. So the plan must spell both out. Hand down a path, never a task name, and never
+make a skill go looking for a task of its own.
 
 ## How It Works
 
 The assistant will:
 
-1. **Bind the task** and confirm the space exists (Step 0)
+1. **Bind the task** and confirm it has started (Step 0)
 2. **Analyze the request** and restate requirements in clear terms
-3. **Ground the plan** in codebase patterns read from the space's worktrees
+3. **Ground the plan** in codebase patterns read from the task's working directories
 4. **Break down into phases** with specific, actionable steps
 5. **Identify dependencies** between components
 6. **Assess risks** and potential blockers
@@ -124,20 +129,22 @@ closed task's paths to satisfy the current convention.
 
 ## Pattern Grounding
 
-**Read each worktree's `AGENTS.md` first**, where it has one:
+**Read each repo's `AGENTS.md` first**, in its working directory, where it has one:
 
 ```bash
-for r in spaces/<task>/*/; do [ -f "$r/AGENTS.md" ] && echo "$r"; done
+.claude/scripts/task.sh where <task> | while IFS=$'\t' read -r repo dir; do
+  [ -f "$dir/AGENTS.md" ] && echo "$dir/AGENTS.md"
+done
 ```
 
 That file is the team's rules for that repo and outranks every skill and pattern
 below it (`CLAUDE.md`). A plan that proposes something it forbids is wrong before
 it is written, so read it before grounding, not after. Repos differ: a rule found
-in one worktree says nothing about the next.
+in one repo says nothing about the next.
 
-Then search the task's worktrees — `spaces/<task>/<repo>/`, never
-`repos/` — for conventions the implementation should mirror. Capture the top example for
-each relevant category with file references:
+Then search the task's working directories for conventions the implementation should
+mirror - they hold the task branch, including any work already done on it. Capture the top
+example for each relevant category with file references:
 
 | Category | What to capture |
 |---|---|
@@ -157,10 +164,10 @@ should not have to re-read the repo to see why the plan departs from a skill.
 ## API Contract
 
 Anything a consumer can observe changing at a boundary is written down separately, in
-`docs/<YYYY-MM-DD>_<task>/api-contract.md`. Frontend and mobile read that file - often
+`docs/<YYYY-MM-DD>_<task>/api-contract.md`. The consumer teams read that file - often
 through an LLM of their own - and build against it while the provider is still being
 written. It is the one task artifact with a reader outside this workspace, so it must
-stand on its own: assume no plan, no PRD, and no knowledge of spaces.
+stand on its own: assume no plan, no PRD, and no knowledge of this workspace.
 
 **Write one when the milestone changes any of these:**
 
@@ -169,7 +176,7 @@ stand on its own: assume no plan, no PRD, and no knowledge of spaces.
 | A new endpoint | `POST /v4/booking/hold` |
 | A new field on an existing response | `cancellationReason` appears on a booking |
 | A changed field | its type, nullability, enum values, or meaning |
-| A new socket event, or a new payload on an existing one | `booking` on the player namespace |
+| A new socket event, or a new payload on an existing one | `booking_held` on the user namespace |
 | An error a consumer must handle differently | `409 SLOT_TAKEN` |
 
 **Skip it** when the milestone is invisible from outside the service - an internal
@@ -189,17 +196,13 @@ never start a second file.
 ### Where the truth lives after merge
 
 This file is authoritative for the boundary *during* the task, when the provider does not
-exist yet to be inspected. Each repo already generates a spec that takes over once the code
-lands, and every entry names the one it will end up in:
+exist yet to be inspected. Most repos already have a spec that takes over once the code
+lands - an OpenAPI or Swagger file, often generated from annotations; AsyncAPI; `.proto`
+files - and every entry names the one it will end up in. Find it in the provider repo, as
+the `contract-first` skill describes; do not assume one.
 
-| Repo | Generated spec | Note |
-|---|---|---|
-| `backend` | `src/openapi/spec/` - split JSON under `paths/` and `components/schemas/`, served at `/docs` | HTTP only |
-| `sport`, `player` | `docs/swagger.yaml` - generated from handler annotations | HTTP only |
-| any socket.io event | none | `src/services/io/<domain>/` generates nothing, so this file stays the only written contract |
-
-Socket events are the case that most needs writing down, precisely because nothing
-generates them.
+Socket and queue events are the case that most needs writing down, precisely because
+nothing usually generates them, so this file stays their only written contract.
 
 ### Template
 
@@ -209,7 +212,7 @@ Use only the entry kinds the milestone actually contains. Dates come from `date 
 # API Contract: {Task Name}
 
 *Task `<task>` · created {YYYY-MM-DD} · last updated {YYYY-MM-DD}*
-**Provider**: {repo} · **Consumers**: {web, mobile, admin} · **Plan**: `plan.md`
+**Provider**: {repo} · **Consumers**: {web, mobile, admin, partner} · **Plan**: `plan.md`
 
 > The agreed shape of every boundary this task changes, written before the provider
 > exists so consumers can build against it. If the implementation needs a different
@@ -221,7 +224,7 @@ Use only the entry kinds the milestone actually contains. Dates come from `date 
 |---|---|---|---|---|
 | 1 | endpoint | `POST /v4/booking/hold` | new | no |
 | 2 | field | `GET /v4/booking/{id}` -> `data.cancellationReason` | added | no |
-| 3 | socket | player ns, event `booking_held` | new | no |
+| 3 | socket | user ns, event `booking_held` | new | no |
 
 **Breaking** means an existing consumer stops working without a change on its side: a
 removed or renamed field, a narrowed type, a newly required request field, or a new enum
@@ -231,9 +234,9 @@ value the consumer must handle. An added optional field is not breaking.
 
 ### 1. NEW ENDPOINT - `POST /v4/booking/hold`
 
-**Milestone** 1 · **Provider** `backend` · **Lands in** `src/openapi/spec/paths/v4/...`
-**Auth**: bearer player token. `401` when absent, `403` when the token does not own the booking.
-**Called when**: the player taps Checkout, once per attempt.
+**Milestone** 1 · **Provider** `{repo}` · **Lands in** `{the provider's spec, e.g. its OpenAPI paths}`
+**Auth**: bearer user token. `401` when absent, `403` when the token does not own the booking.
+**Called when**: the user taps Checkout, once per attempt.
 
 Request
 
@@ -258,7 +261,7 @@ Errors the consumer branches on
 
 | Status | `code` | Means | Consumer does |
 |---|---|---|---|
-| 409 | `SLOT_TAKEN` | another player holds it | re-fetch the slot list, show it taken |
+| 409 | `SLOT_TAKEN` | another user holds it | re-fetch the slot list, show it taken |
 | 422 | `VENUE_CLOSED` | outside opening hours | show the venue's hours |
 
 Anything else is a generic error; do not branch on it.
@@ -267,7 +270,7 @@ Anything else is a generic error; do not branch on it.
 
 ### 2. NEW FIELD - `data.cancellationReason` on `GET /v4/booking/{id}`
 
-**Milestone** 1 · **Provider** `backend` · **Breaking** no (additive, optional)
+**Milestone** 1 · **Provider** `{repo}` · **Breaking** no (additive, optional)
 
 | Field | Type | Null? | Notes |
 |---|---|---|---|
@@ -288,11 +291,11 @@ Until all of them ship, a consumer must treat a missing key and an explicit `nul
 
 ### 3. NEW SOCKET EVENT - `booking_held`
 
-**Milestone** 1 · **Provider** `backend`, `src/services/io/booking/` · **Generated spec** none
+**Milestone** 1 · **Provider** `{repo}`, `{the emitting module}` · **Generated spec** none
 
 | Aspect | Value |
 |---|---|
-| Namespace | player realtime |
+| Namespace | user realtime |
 | Room | the booking id |
 | How the client joins | `handshake.query.bookingId`, a UUID the server validates and rejects if unknown |
 | Direction | server -> client |
@@ -353,18 +356,18 @@ unknown.
 ````markdown
 # Plan: {Feature Name}
 
-**Task**: `<task>`
-**Space**: `spaces/<task>/` — repos: backend, sport
+**Task**: `<task>` · **Isolation**: `inplace` | `space`
 **Branch**: `<prefix>/<task>` from `origin/feature/m5.1`
-**Working directories**: `spaces/<task>/backend/`, `spaces/<task>/sport/`
-**Base commits**: backend `a1b2c3d4e`, sport `f5e6d7c8b`
+**Workspace root**: `{absolute path from task.sh root}`
+**Working directories**: `{repo}` -> `{path from task.sh where}`, one per repo
+**Base commits**: `{repo}` `a1b2c3d4e`, one per repo
 **Source PRD**: `docs/<YYYY-MM-DD>_<task>/prd.md`
 **Selected Milestone**: {N} — {milestone name}
 **Complexity**: {Small | Medium | Large}
 **Created**: {YYYY-MM-DD} · **Last updated**: {YYYY-MM-DD}
 
-> All paths below are relative to the workspace root and live inside the space.
-> `repos/` is read-only and must not appear in this plan.
+> Paths below are relative to each repo's working directory, written `<repo>:path`.
+> Nothing outside the working directories above is written.
 
 ## Summary
 {2-3 sentences}
@@ -372,26 +375,26 @@ unknown.
 ## Patterns to Mirror
 | Category | Source | Pattern |
 |---|---|---|
-| Naming | `spaces/<task>/<repo>/path:line` | {short description} |
-| Errors | `spaces/<task>/<repo>/path:line` | {short description} |
-| Tests | `spaces/<task>/<repo>/path:line` | {short description} |
+| Naming | `<repo>:path:line` | {short description} |
+| Errors | `<repo>:path:line` | {short description} |
+| Tests | `<repo>:path:line` | {short description} |
 
 ## Files to Change
 | File | Action | Why |
 |---|---|---|
-| `spaces/<task>/<repo>/path` | CREATE / UPDATE / DELETE | {reason} |
+| `<repo>:path` | CREATE / UPDATE / DELETE | {reason} |
 
 ## Tasks
 ### Task 1: {name}
-- **Working directory**: `spaces/<task>/{repo}/`
+- **Working directory**: `{repo}` -> `{path from task.sh where}`
 - **Action**: {what to do}
 - **Mirror**: {pattern to follow}
 - **Validate**: {command that proves correctness, run from the working directory}
 
 ## Validation
 ```bash
-# run from inside the space, one block per repo
-cd spaces/<task>/<repo> && {project-specific validation command}
+# run from each repo's working directory, one block per repo
+cd "$(.claude/scripts/task.sh where <task> <repo>)" && {project-specific validation command}
 ```
 
 ## Risks
@@ -402,23 +405,23 @@ cd spaces/<task>/<repo> && {project-specific validation command}
 - [ ] All tasks complete
 - [ ] Validation passes in every repo the plan touches
 - [ ] Patterns mirrored, not reinvented
-- [ ] No file outside `spaces/<task>/` was written
+- [ ] No file outside the task's working directories was written
 - [ ] Every boundary change is in `api-contract.md`, or the Summary says why there is none
 
 ## Handoff
-<!-- What a space-blind skill or agent needs, and nothing more. -->
+<!-- What a layout-blind skill or agent needs, and nothing more. -->
 
 **Evidence report**: `docs/<YYYY-MM-DD>_<task>/testing.md`
 **API contract**: `docs/<YYYY-MM-DD>_<task>/api-contract.md` — or `none, no boundary change`
 
 | Consumer | Working directory | Base ref |
 |---|---|---|
-| tdd-workflow | `spaces/<task>/backend/` | — |
-| go-reviewer | `spaces/<task>/sport/` | `f5e6d7c8b` |
+| tdd-workflow | `{path from task.sh where}` | — |
+| go-reviewer | `{path from task.sh where}` | `f5e6d7c8b` |
 ````
 
 The evidence report is one file for the whole task, not one per repo. `tdd-workflow` is
-space-blind and would otherwise write inside the working directory it was given, which
+layout-blind and would otherwise write inside the working directory it was given, which
 would scatter the evidence across the service repos and put it in their PRs. Hand it that
 path explicitly, every time, for every repo: each run adds its own `## <repo>` section to
 the same file.
@@ -433,8 +436,7 @@ After writing the artifact, report its path and WAIT for confirmation before wri
 Report the handoff explicitly:
 
 ```
-Task:  <task>
-Space: spaces/<task>/  (backend, sport)  branch <prefix>/<task>
+Task:  <task>  (inplace | space)  repos <repo>, <repo>  branch <prefix>/<task>
 
 Milestone: {N} — {milestone name}
 Plan written: docs/<date>_<task>/plan.md          (plan-m{N}.md for a later milestone)
@@ -444,11 +446,12 @@ API contract: docs/<date>_<task>/api-contract.md  ({n} changes: {n} endpoints, {
 PRD updated: milestone {N} -> in-progress
 
 Next step (after you confirm): tdd-workflow skill with docs/<date>_<task>/plan.md
-  -> pass it the working directory: spaces/<task>/<repo>/
+  -> pass it the working directory: task.sh where <task> <repo>
+     the workspace root: task.sh root
      the evidence report path: docs/<date>_<task>/testing.md
      and the API contract path: docs/<date>_<task>/api-contract.md
      The skill takes the plan's tasks and Validate commands as intent, then proves
-     each one through its own RED/GREEN gate. It knows the directory, not the space.
+     each one through its own RED/GREEN gate. It knows the directory, not the task.
 ```
 
 ## Example Usage
@@ -457,18 +460,17 @@ Next step (after you confirm): tdd-workflow skill with docs/<date>_<task>/plan.m
 User: /plan I need to add real-time notifications when markets resolve
 
 Assistant:
-Task binding: no space named `market-resolution-notifications` yet.
+Task binding: no task named `market-resolution-notifications` is open.
 Which repos does this touch, and what source branch should it start from?
 
-User: backend,sport from origin/develop
+User: api,worker from origin/develop
 
 Assistant:
-[runs .claude/scripts/space.sh add market-resolution-notifications backend,sport --from origin/develop]
+[runs .claude/scripts/task.sh start market-resolution-notifications api,worker --from origin/develop]
 
 # Implementation Plan: Real-Time Market Resolution Notifications
 
-**Task**: `market-resolution-notifications`
-**Space**: `spaces/market-resolution-notifications/` — backend, sport
+**Task**: `market-resolution-notifications` · **Isolation**: `inplace`
 **Branch**: `<prefix>/market-resolution-notifications` from `origin/develop`
 
 ## Requirements Restatement
@@ -485,7 +487,7 @@ Assistant:
 - Create indexes on user_id and market_id for performance
 
 ### Phase 2: Notification Service
-- Create notification service in spaces/market-resolution-notifications/backend/src/lib/notifications.ts
+- Create notification service in `api:src/lib/notifications.ts`
 - Implement notification queue
 - Add retry logic for failed deliveries
 - Create notification templates
@@ -517,7 +519,7 @@ Assistant:
 
 **CRITICAL**: This command will **NOT** write any code until you explicitly confirm the plan with "yes" or "proceed" or similar affirmative response.
 
-**CRITICAL**: This command never plans a write under `repos/`. Those checkouts are read-only origins; all editing happens in `spaces/<task>/<repo>/`.
+**CRITICAL**: This command never plans a write outside the task's working directories. Every path comes from `task.sh where`; a checkout the task does not hold is sealed, and the guard refuses it.
 
 If you want changes, respond with:
 - "modify: [your changes]"
@@ -529,19 +531,19 @@ If you want changes, respond with:
 The workspace chain is:
 
 ```
-/space add <task> --from <ref>   ->  spaces/<task>/<repo>/
+/task start <task> --from <ref>  ->  working directories (task.sh where)
 /plan-prd                        ->  docs/<date>_<task>/prd.md
 /plan                            ->  docs/<date>_<task>/plan.md   (plan-m2.md, ... per milestone)
                                  ->  docs/<date>_<task>/api-contract.md   (when a boundary changes)
 tdd-workflow skill               ->  implementation, evidence in docs/<date>_<task>/testing.md
-/space remove <task>             ->  docs/<date>_<task>/log.md, then teardown
+/task finish <task>              ->  docs/<date>_<task>/log.md, then finish
 ```
 
 Every artifact of a task lands in one directory, `docs/<date>_<task>/`. The date is the day
 the PRD was written; find an existing directory with `ls -d docs/*_<task>/` rather than
 reconstructing it.
 
-- **Need requirements first?** Use `/plan-prd` — it names the task, opens the space, and writes `docs/<date>_<task>/prd.md`. Then pass that PRD back to `/plan`.
+- **Need requirements first?** Use `/plan-prd` — it names the task, starts it, and writes `docs/<date>_<task>/prd.md`. Then pass that PRD back to `/plan`.
 - **Ready to build?** Hand the generated plan to the `tdd-workflow` skill
   (`.claude/skills/tdd-workflow/SKILL.md`) with the plan path as its argument. The skill
   treats the plan as untrusted input: it converts each task into a failing test first, and
@@ -549,5 +551,6 @@ reconstructing it.
 - **Changing an API, a payload, or a socket event?** The `contract-first` skill governs how
   a boundary moves; `api-contract.md` is where this workspace writes the result down. Both
   are for the shape consumers see — `api-design` is for whether that shape is any good.
-- **No space yet?** `/space add <task> [repos] --from <ref>` creates it. `/space list` shows
-  what is open; `/space remove <task>` writes the wrap-up log and tears it down.
+- **No task yet?** `/task start <task> [repos] --from <ref>` starts it, in place unless
+  `--space`. `/task list` shows what is open; `/task finish <task>` writes the wrap-up log
+  and releases its working directories.

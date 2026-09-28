@@ -101,7 +101,7 @@ WRITE_HINT = (
     "Work in the task space instead: spaces/<task>/<repo>/... - git add, commit\n"
     "and push are all allowed there.\n"
     "No space yet? Ask the user for the repos and the source branch, then\n"
-    "run: .claude/scripts/space.sh add <task> <repos> --from <source-branch>"
+    "run: .claude/scripts/task.sh start <task> <repos> --from <source-branch>"
 )
 
 REF_HINT = (

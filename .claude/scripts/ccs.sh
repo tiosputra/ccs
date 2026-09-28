@@ -2,7 +2,7 @@
 #
 # ccs.sh - health check and improvement notes for the workspace system itself.
 #
-# space.sh looks after tasks. This one looks after the thing that runs tasks:
+# task.sh looks after tasks. This one looks after the thing that runs tasks:
 # the commands, skills, scripts and rules under .claude/, and whether they
 # still describe the workspace as it actually is.
 #
@@ -28,8 +28,9 @@ ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CLAUDE_DIR="$ROOT/.claude"
 NOTES="$CLAUDE_DIR/ccs-notes.md"
 . "$SCRIPT_DIR/config.sh"
-cfg_resolve SPACE_BRANCH_PREFIX ccs
-BRANCH_PREFIX="$SPACE_BRANCH_PREFIX"
+. "$SCRIPT_DIR/tasklib.sh"
+cfg_resolve_renamed TASK_BRANCH_PREFIX SPACE_BRANCH_PREFIX ccs
+BRANCH_PREFIX="$TASK_BRANCH_PREFIX"
 
 usage() { sed -n '3,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
@@ -37,9 +38,9 @@ finding() { printf 'finding\t%s\t%s\t%s\n' "$1" "$2" "$3"; }
 ok()      { printf 'ok\t%s\t%s\n' "$1" "$2"; }
 
 # Prose files that are supposed to describe the workspace to a reader.
-DOCS="$ROOT/README.md $ROOT/CLAUDE.md $CLAUDE_DIR/commands/space.md"
+DOCS="$ROOT/README.md $ROOT/CLAUDE.md $CLAUDE_DIR/commands/task.md"
 
-# Repo directory names, read from disk - the same rule space.sh uses.
+# Repo directory names, read from disk - the same rule task.sh uses.
 all_repo_names() {
   local d
   for d in "$ROOT"/repos/*/; do
@@ -57,10 +58,10 @@ check_repos() {
   # The roster is read from disk on purpose, so the check is not "is every
   # repo listed" - nothing lists them. It is "do the docs still send a reader
   # to the live roster, and do they name any service that no longer exists".
-  for doc in "$ROOT/README.md" "$CLAUDE_DIR/commands/space.md"; do
+  for doc in "$ROOT/README.md" "$CLAUDE_DIR/commands/task.md"; do
     [ -f "$doc" ] || continue
-    grep -qE '(/space|space\.sh) repos' "$doc" \
-      || { finding med repos "${doc#$ROOT/} never points at '/space repos' - a reader has no way to learn what is checked out"; bad=$((bad+1)); }
+    grep -qE '(/task|task\.sh) repos' "$doc" \
+      || { finding med repos "${doc#$ROOT/} never points at '/task repos' - a reader has no way to learn what is checked out"; bad=$((bad+1)); }
   done
 
   # A doc naming repos/<something> that is not on disk: a stale example, or a
@@ -185,7 +186,10 @@ check_docs_commands() {
     # Skills and built-ins are invoked the same way; only flag names that look
     # like this workspace's own commands and have no file.
     case "$c" in
-      space|plan|plan-prd|pr|ccs) ;;
+      space)
+        finding high commands "docs reference /space, which /task replaced - start, list and finish tasks with /task"
+        bad=$((bad + 1)); continue ;;
+      task|plan|plan-prd|pr|ccs|learn|graph) ;;
       *) continue ;;
     esac
     finding high commands "docs reference /$c but .claude/commands/$c.md does not exist"
@@ -230,7 +234,7 @@ check_config() {
     finding high config ".env.example is missing - nothing tells a new machine what is configurable"
     bad=$((bad + 1))
   else
-    for var in $(grep -rhoE 'cfg_resolve +[A-Z_]+' "$CLAUDE_DIR"/scripts/*.sh 2>/dev/null \
+    for var in $(grep -rhoE 'cfg_resolve(_renamed)? +[A-Z_]+' "$CLAUDE_DIR"/scripts/*.sh 2>/dev/null \
                  | awk '{print $2}' | sort -u); do
       grep -qE "^[[:space:]]*#?[[:space:]]*$var[[:space:]]*=" "$ROOT/.env.example" \
         || { finding med config "$var is resolved by a script but absent from .env.example"; bad=$((bad+1)); }
@@ -240,7 +244,7 @@ check_config() {
     finding high config ".env is tracked in git - one person's settings would become everyone's"
     bad=$((bad + 1))
   fi
-  [ "$bad" -eq 0 ] && ok config "prefix '$BRANCH_PREFIX' (from $(cfg_source SPACE_BRANCH_PREFIX)); .env.example documents every setting and .env is untracked"
+  [ "$bad" -eq 0 ] && ok config "prefix '$BRANCH_PREFIX' (from $(cfg_source TASK_BRANCH_PREFIX)); .env.example documents every setting and .env is untracked"
 }
 
 check_doc_prefix() {
@@ -252,7 +256,7 @@ check_doc_prefix() {
     [ -f "$f" ] || continue
     for hit in $(grep -ohE '[a-z][a-z0-9-]*/<task>' "$f" 2>/dev/null | sort -u); do
       case "${hit%%/*}" in
-        spaces|repos|docs|release|testing) continue ;;
+        spaces|tasks|repos|docs|release|testing) continue ;;
       esac
       finding med docs "${f#$ROOT/} hardcodes '$hit' - the prefix is per machine, write '<prefix>/<task>'"
       bad=$((bad + 1))
@@ -283,7 +287,7 @@ check_branch_prefix() {
         # The .claude/ subdirectories are here for the same reason - machinery
         # work is named after the artifact it builds, so a PRD for a command
         # called X legitimately writes commands/X and scripts/X.
-        case "$pfx" in origin|refs|remotes|spaces|repos|docs|testing|release|commands|scripts|skills|agents) continue;; esac
+        case "$pfx" in origin|refs|remotes|spaces|tasks|repos|docs|testing|release|commands|scripts|skills|agents) continue;; esac
         if [ "$pfx" != "$BRANCH_PREFIX" ]; then
           finding med branch "${f#$ROOT/} names the branch '$pfx/$task', but this machine resolves '$BRANCH_PREFIX/' - a PRD should say '<prefix>/<task>'"
           bad=$((bad + 1))
@@ -325,7 +329,7 @@ check_artifacts() {
   # plan-m<N>.md, api-contract.md, testing.md and log.md, plus any supporting
   # file (.sql, .csv, notes). A file loose in docs/ is a stray, and so is a renamed
   # copy of a standard artifact - plan-v2.md is invisible to every command.
-  local log d f name task bad=0 space entry
+  local log d f name task bad=0 entry repo
   for entry in "$ROOT"/docs/*; do
     [ -e "$entry" ] || continue
     name="$(basename "$entry")"
@@ -364,17 +368,24 @@ check_artifacts() {
       bad=$((bad + 1))
     fi
   done
-  for space in "$ROOT"/spaces/*/; do
-    [ -d "$space" ] || continue
-    task="$(basename "$space")"
-    [ "$task" = "README.md" ] && continue
-    [ -f "$space/.space" ] || finding med artifacts "spaces/$task has no .space metadata - report and teardown will be thin"
-    if [ -z "$(find "$space" -mindepth 1 -maxdepth 1 -not -name '.space' 2>/dev/null)" ]; then
-      finding med artifacts "spaces/$task holds no worktree - an orphan left by a failed teardown"
+  # Open tasks, read through tasklib.sh so both layouts and legacy metadata count.
+  for task in $(task_names); do
+    if ! task_meta "$task" >/dev/null 2>&1; then
+      finding med artifacts "spaces/$task has no task metadata - report and finish will be thin"
       bad=$((bad + 1))
     fi
+    if [ -z "$(task_repos "$task")" ]; then
+      finding med artifacts "task '$task' holds no repo - an orphan left by a failed start or finish; task.sh finish $task --force clears it"
+      bad=$((bad + 1))
+      continue
+    fi
+    for repo in $(task_repos "$task"); do
+      [ -e "$(task_workdir "$task" "$repo")/.git" ] && continue
+      finding med artifacts "task '$task' lists $repo, but its working directory is gone"
+      bad=$((bad + 1))
+    done
   done
-  [ "$bad" -eq 0 ] && ok artifacts "every task doc sits in docs/<date>_<task>/ under a standard or supporting name, logs trace back to PRDs, no orphan spaces"
+  [ "$bad" -eq 0 ] && ok artifacts "every task doc sits in docs/<date>_<task>/ under a standard or supporting name, logs trace back to PRDs, no orphan tasks"
 }
 
 check_notes() {
@@ -392,7 +403,7 @@ check_notes() {
 
 cmd_check() {
   printf 'root\t%s\n' "$ROOT"
-  printf 'prefix\t%s\t%s\n\n' "$BRANCH_PREFIX" "from $(cfg_source SPACE_BRANCH_PREFIX)"
+  printf 'prefix\t%s\t%s\n\n' "$BRANCH_PREFIX" "from $(cfg_source TASK_BRANCH_PREFIX)"
   check_repos
   check_scripts
   check_commands
