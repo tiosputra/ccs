@@ -341,6 +341,16 @@ Now run straight through. No further permission prompts; Gate 1 covered all of t
    forbids. The skill is handed directories, so it will not go looking, and a rule
    found in one repo does not apply in the next.
 
+   **Several repos at once.** A milestone touching more than one repo may hand each
+   repo to a `tdd-guide` subagent instead, all dispatched together. Give each the
+   same things plus the workspace root (`task.sh root`) and that repo's base commit,
+   but pass the evidence as `return`, not the path: parallel agents must not edit one
+   file. Each replies with its `## <repo>` section; append them to `testing.md`
+   yourself, one per repo. An agent that stops - usually a repo whose
+   `tdd-workflow` facts are not learned - is reported to the user, not retried.
+   One repo, or a change where one repo's tests depend on another's code, stays
+   inline.
+
 5. **Review it.** First run `.claude/scripts/graph.sh review <task>`. It rebuilds each
    repo's code-review-graph if stale and prints, per repo, the changed functions, affected
    flows and the changed functions no test covers. `/graph` says how to read it. If the
