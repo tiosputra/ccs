@@ -25,28 +25,27 @@ See `CLAUDE.md`.
 ## In this workspace
 
 The canonical artifact is `docs/<YYYY-MM-DD>_<task>/api-contract.md`, written by
-`/plan` before the provider exists and read by the frontend and mobile teams -
+`/plan` before the provider exists and read by the consumer teams (web, mobile, partners) -
 usually through an LLM of their own. `/plan`'s **API Contract** section holds the
 template and the rule for when a task needs one; this skill holds the reasoning
 behind it.
 
 That file is authoritative only while the task is in flight. What takes over on
-merge differs by repo, and every entry names which:
+merge differs by repo, and every entry names which. Find it in the repo rather than
+assuming: search for an OpenAPI or Swagger file (`openapi`, `swagger.yaml`, a
+`spec/` directory served at `/docs`), an AsyncAPI file, or `.proto` definitions, and
+check whether it is written by hand or generated from annotations. If the repo's
+`AGENTS.md` names the spec, that settles it.
 
-| Repo | Generated spec |
-|---|---|
-| `backend` | `src/openapi/spec/` - split JSON under `paths/` and `components/schemas/`, served at `/docs` |
-| `sport`, `player` | `docs/swagger.yaml`, generated from handler annotations |
-| socket.io events (`backend/src/services/io/<domain>/`) | nothing is generated |
+Events are the usual gap. A socket or queue event often has nothing generated at all,
+and that is why this workspace writes contracts in prose. A REST change eventually
+lands in a spec a consumer can read; an event lands in a handler nobody outside the
+service will ever open. Its channel or room key, its envelope, its ordering and its
+replay-on-reconnect behavior exist in exactly one place - `api-contract.md` - or in
+no place at all.
 
-The last row is why this workspace writes contracts in prose at all. A REST change
-eventually lands in a spec a consumer can read; a socket event lands in a handler
-nobody outside the service will ever open. Its room key, its `{ data: ... }`
-envelope, its ordering and its replay-on-reconnect behavior exist in exactly one
-place - `api-contract.md` - or in no place at all.
-
-The consumer repos are `REFERENCE_REPOS` on most machines (`/space config` says
-which). That is the constraint this skill is really for: you cannot change the
+The consumer repos are often `REFERENCE_REPOS` (`/task config` says which on this
+machine). That is the constraint this skill is really for: you cannot change the
 consumer to match a provider you drifted, so the contract is the only place the
 two sides meet.
 

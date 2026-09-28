@@ -143,6 +143,38 @@ check_skills() {
   [ "$bad" -eq 0 ] && ok skills "every skill is well-formed and every reference resolves"
 }
 
+# Skills and agents are the method; facts about one repo live in
+# .claude/learned/<repo>/. A skill naming a repo this machine knows - a checkout
+# under repos/ or a repo something was learned about - is carrying facts that
+# belong in a learned file, and is wrong for every other project. The list comes
+# from disk, so this check names no project itself.
+#
+# A name counts only where it is used as a name: backticked (`api`, `api/src`) or
+# as a path segment (repos/api, api/src/). A repo called "backend" must not flag
+# "backend logic" or `backend-patterns`.
+known_repo_names() {
+  local d
+  { all_repo_names
+    for d in "$CLAUDE_DIR"/learned/*/; do [ -d "$d" ] && basename "$d"; done
+  } | sort -u
+}
+
+check_skill_facts() {
+  local name f hits bad=0 bt='`'
+  for name in $(known_repo_names); do
+    for f in "$CLAUDE_DIR"/skills/*/*.md "$CLAUDE_DIR"/agents/*.md; do
+      [ -f "$f" ] || continue
+      hits="$(grep -cE "$bt$name($bt|/)|(^|[^[:alnum:]_./-])(repos/|spaces/[^/[:space:]]+/)?$name/[[:alnum:]_.]" "$f" 2>/dev/null)"
+      [ -n "$hits" ] || hits=0
+      if [ "$hits" -gt 0 ]; then
+        finding med skills "${f#$ROOT/} names repo '$name' $hits time(s) - repo facts belong in .claude/learned/$name/, not in a skill"
+        bad=$((bad+1))
+      fi
+    done
+  done
+  [ "$bad" -eq 0 ] && ok skills "no skill or agent names a repo this machine knows ($(known_repo_names | wc -l | tr -d ' ') known)"
+}
+
 check_docs_commands() {
   local c bad=0
   for c in $(grep -rhoE '(^|[ `(])/[a-z][a-z0-9-]{2,}' \
@@ -365,6 +397,7 @@ cmd_check() {
   check_scripts
   check_commands
   check_skills
+  check_skill_facts
   check_settings
   check_guard
   check_docs_commands

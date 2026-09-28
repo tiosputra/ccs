@@ -1,24 +1,48 @@
 ---
 name: tdd-workflow
-description: Use this skill when writing new features, fixing bugs, or refactoring code in any swing service. Enforces test-driven development with a RED/GREEN gate and an evidence report, across Go and TypeScript.
+description: Use this skill when writing new features, fixing bugs, or refactoring code in a service repo. Enforces test-driven development with a RED/GREEN gate and an evidence report, in any language.
 argument-hint: <path/to/plan.md> [evidence report path] [api contract path]
 metadata:
-  origin: ECC, adapted for swing
+  origin: ECC
+  learns: true
+  fingerprint:
+    - lines go.mod ^go[[:space:]]
+    - lines package.json "(jest|vitest|mocha|ava|jasmine|ts-jest|@swc/jest|playwright|cypress)"
+    - files jest.config.*
+    - files vitest.config.*
 ---
 
 # Test-Driven Development Workflow
 
 This skill ensures all code development follows TDD principles with comprehensive test
-coverage. The workspace holds services in more than one language, so the cycle below is
-language-neutral: every step names *what* must be proven, and Step 0 resolves *which
-commands* prove it for the repo being touched.
+coverage. This file is the method, and it is language-neutral: every step names *what*
+must be proven. *Which commands* prove it in the repo being touched - its runner, its
+layout, its traps - are facts about that repo, so they live in its learned file, not here.
 
-## Repo rules first
+## Load the repo's facts first
 
-If the repo being changed carries an `AGENTS.md` at its root, read it before
-applying anything below, and follow it wherever the two disagree. It was written
-for that codebase; this file was not. Where it is silent, this skill applies.
-See `CLAUDE.md`.
+The repo is the name of the working directory you were given.
+
+Start with the repo's own `AGENTS.md`, if it has one - the team's rules, committed
+beside the code. Then the learned file:
+
+```
+.claude/scripts/learn.sh status tdd-workflow
+```
+
+| State | Do |
+|---|---|
+| `fresh` | Read `.claude/learned/<repo>/tdd-workflow.md` and follow it |
+| `stale` | The test setup it watches has moved. Run `/learn tdd-workflow <repo>` before relying on it |
+| `missing`, `unstamped` | Run `/learn tdd-workflow <repo>` first |
+
+If the row says `unreviewed`, follow the file but say in your evidence report that no one
+has checked it yet.
+
+Three layers, highest first, each winning only where it actually speaks: the repo's
+`AGENTS.md` (the team's rules), then the learned file (measured in that repo), then this
+skill (the method, measured nowhere). Where `AGENTS.md` and the learned file disagree,
+follow `AGENTS.md` and say so in the report. See `CLAUDE.md`.
 
 ## When to Activate
 
@@ -43,7 +67,7 @@ or by whoever invoked you. Everything in this workflow happens there:
 - **One exception**: the evidence report of Step 8 is written to the path the caller gives
   you, which is deliberately outside this directory. That path is the only one you may
   write outside the working directory, and only to that one file.
-- A change spanning two services means two working directories, each with its own
+- A change spanning two repos means two working directories, each with its own
   RED/GREEN gate. Never a shared one.
 
 Whatever chose that directory has already decided where this work belongs. That is not
@@ -117,8 +141,8 @@ ALWAYS write tests first, then implement code to make tests pass.
 - Edge cases covered: zero values, empty collections, nil/undefined, boundaries
 - Error paths tested, not just happy paths
 - Coverage percentage is measured on the packages you touched, not on the whole service.
-  A blanket repo-wide threshold is not enforced in these repos and inventing one produces
-  noise, not safety.
+  Unless the repo's CI or `AGENTS.md` enforces a repo-wide threshold, do not invent one:
+  it produces noise, not safety.
 
 ### 3. Test Types
 
@@ -136,53 +160,44 @@ ALWAYS write tests first, then implement code to make tests pass.
 - A complete request path through the service, from transport to persistence
 - Cross-service flows exercised through the real API surface
 
-These are backend services. There is no browser to drive, so there is no Playwright layer
-here. "E2E" means through the service's own entrypoint, not through a UI.
+For a service with no UI, there is no browser to drive, and "E2E" means through the
+service's own entrypoint. Where a repo does have a browser layer, its learned file names
+the runner.
 
 ## TDD Workflow Steps
 
 ### Step 0: Resolve the Test Commands for This Repo
 
 Do not assume a runner. The steps below use `<test>`, `<test-one>`, `<test-changed>`,
-`<coverage>`, and `<build>` as placeholders. Resolve them once, from the repo you are
-actually editing:
+`<coverage>`, and `<build>` as placeholders. Resolve them once, from the learned file's
+`## Commands` table for the repo you are actually editing, and substitute them everywhere
+below. The learned file was measured there; do not re-derive it unless it is stale.
 
-1. **Identify the language.** `go.mod` at the repo root means Go. `package.json` plus
-   `tsconfig.json` means TypeScript/Node.
-   Note the `player` service has a `package.json`, but it only builds MJML email templates -
-   it is a Go service. The presence of `go.mod` wins.
-2. **Check the makefile before inventing commands.** Neither Go service currently defines
-   a `test` target, so use the toolchain directly. If a `test` target appears later, prefer it.
-3. **Substitute the placeholders** everywhere they appear below.
+What holds in any repo, and what `/learn` measured against:
 
-Command matrix:
-
-| Repo | Language | `<test>` | `<test-one>` | `<test-changed>` | `<coverage>` | `<build>` |
-|---|---|---|---|---|---|---|
-| `backend` | TypeScript, Jest (`ts-jest`) | `<jest> --maxWorkers=2 --workerIdleMemoryLimit=512MB` | `<jest> --maxWorkers=1 src/path/to/file.test.ts` | `<jest> --maxWorkers=2 --workerIdleMemoryLimit=512MB --changedSince=<base> --coverage --coverageReporters=text` | part of `<test-changed>` | `npx tsc --noEmit` |
-| `sport` | Go 1.24 | `go test -p 4 ./...` | `go test -run TestName ./internal/domain` | `go test -p 4 ./...` | `go test -p 4 -coverprofile=coverage.out ./internal/... && go tool cover -func=coverage.out` | `go build ./...` |
-| `player` | Go 1.24 | `go test -p 4 ./...` | `go test -run TestName ./internal/domain` | `go test -p 4 ./...` | `go test -p 4 -coverprofile=coverage.out ./internal/... && go tool cover -func=coverage.out` | `go build ./...` |
-
-- **`<jest>`** is `npx jest --config ../../../.claude/scripts/jest-transpile.config.js
-  --watchman=false`, run from the working directory (`spaces/<task>/<repo>/` is three
-  levels below the workspace root). That config is the repo's own
-  `jest.config.js` with ts-jest's per-worker typecheck turned off. `<build>` is the
-  typecheck, so a type error still fails the verify step, just not the test run. Do not
-  go back to plain `npm test`: see "Why transpile-only" below.
+- **The language comes from the root manifest, and `go.mod` wins.** A repo can carry a
+  `package.json` only for tooling - templates, scripts - and still be a Go service.
+- **Prefer the repo's own test target** (a makefile `test` target, a package script) over
+  inventing a toolchain command, unless the learned file says it is too slow or too wide.
+- **`<jest>`**, for a TypeScript repo whose learned file says it uses ts-jest, is
+  `npx jest --config <root>/.claude/scripts/jest-transpile.config.js --watchman=false`,
+  run from the working directory. `<root>` is the workspace root: the plan's Handoff
+  block names it. That config is the repo's own `jest.config.js` with ts-jest's
+  per-worker typecheck turned off. `<build>` is the typecheck, so a type error still fails
+  the verify step, just not the test run. See "Why transpile-only" below.
 - **`<base>`** is the repo's base commit from the plan's `**Base commits**` line. If you
   were not given one, ask, the same as for the working directory.
 - **`<test-changed>`** runs every test whose import graph reaches a file changed since
-  `<base>`, committed or not, untracked included. With `--coverage` it reports coverage
-  for exactly those changed files, which is the coverage this skill asks for, so backend
-  needs no separate full-suite coverage run. `--coverageReporters=text` prints the table
-  and writes nothing; backend does not gitignore `coverage/`, so a file reporter would
-  leave a directory in the space for `/pr` to stage.
+  `<base>`, committed or not, untracked included. With jest that is
+  `--changedSince=<base> --coverage --coverageReporters=text`: it reports coverage for
+  exactly the changed files, which is the coverage this skill asks for, and the `text`
+  reporter writes nothing, so no `coverage/` directory is left for the PR to stage.
 - In Go, `go test ./...` already reruns only the packages whose inputs changed and
-  reports the rest `(cached)`. So after the first run in a space, `<test>` is the changed
-  set and `<test-changed>` is the same command.
+  reports the rest `(cached)`. So after the first run in a working directory, `<test>` is
+  the changed set and `<test-changed>` is the same command.
 
-The concurrency flags are part of the command, not decoration - see "Bounded
-runs" below before dropping one.
+The concurrency flags in the learned commands are part of the command, not decoration -
+see "Bounded runs" below before dropping one.
 
 Notes that matter in practice:
 
@@ -192,28 +207,26 @@ Notes that matter in practice:
   need proof the test actually ran for the RED/GREEN gate.
 - **Go watch mode**: there is no native watch. Rerun `<test-one>` on the narrow package;
   it is fast enough that a watcher is not worth adding.
-- **backend watch mode**: `<jest> --watch --maxWorkers=2`. A watcher holds
-  its workers alive between runs, so leaving one running costs the machine for as
-  long as the session lasts. Close it when you stop iterating.
-- **backend narrow runs**: the repo already ships focused scripts, for example
-  `npm run test:leaderboard-strategies` and `npm run test:leaderboard-integration`.
-  They are worth reading for the glob they name, but they run the repo's typechecking
-  config. Pass that glob to `<test-one>` instead.
-- **Compile-time RED in TypeScript** (Step 3) no longer comes from the test run, because
-  `<jest>` does not typecheck. A test that calls a function that does not exist yet fails
-  at runtime instead (`is not a function`, `undefined`), which is valid runtime RED. If
-  the type error itself is the RED you mean to show, take it from `<build>`.
-- **A change spanning two services** must satisfy the gate in each service separately.
+- **jest watch mode**: `<jest> --watch --maxWorkers=2`. A watcher holds its workers alive
+  between runs, so leaving one running costs the machine for as long as the session lasts.
+  Close it when you stop iterating.
+- **A repo's own focused test scripts** are worth reading for the glob they name, but they
+  may run the repo's slow config. Pass that glob to `<test-one>` instead.
+- **Compile-time RED in TypeScript** (Step 3) does not come from a transpile-only test run.
+  A test that calls a function that does not exist yet fails at runtime instead
+  (`is not a function`, `undefined`), which is valid runtime RED. If the type error itself
+  is the RED you mean to show, take it from `<build>`.
+- **A change spanning two repos** must satisfy the gate in each repo separately.
   Two repos means two RED runs and two GREEN runs.
 
 ### Bounded runs: one machine, many sessions
 
-Every runner in the matrix defaults to filling the machine. Jest forks one worker
+Every common runner defaults to filling the machine. Jest forks one worker
 per core minus one, and each worker is a node process carrying its own ts-jest
 compiler; `go test` builds and runs up to `GOMAXPROCS` package binaries at once.
 Both defaults assume they are the only thing running.
 
-In this workspace they are not. Sessions run concurrently, each in its own space,
+In this workspace they are not. Sessions run concurrently, each on its own task,
 each free to start a full suite - so the real load is the default multiplied by
 however many sessions are alive. That is how a laptop ends up swapping with
 twenty-odd node processes on it, none of which is doing anything wrong.
@@ -230,7 +243,8 @@ does not shrink to compensate.
 
 #### Why transpile-only
 
-Measured on `backend` 2026-09-25: 112 suites, cold cache, 2 workers, 12-core laptop.
+Measured on one TypeScript service, 2026-09-25: 112 suites, cold cache, 2 workers,
+12-core laptop.
 
 | Config | Full suite | One heavy file | Worker memory |
 |---|---|---|---|
@@ -242,20 +256,20 @@ Both runs had the same results: 972 passed, the same 2 failed, 29 todo.
 By default ts-jest typechecks every file it compiles. A worker doing that passes 512 MB
 within its first test file, so the memory limit recycles it after every file, and each
 new worker rebuilds the TypeScript program from scratch. That pairing, not the test
-count, is what made the suite take eleven minutes. Every new space starts with a cold
-cache, because jest keys its cache by absolute path. So none of that cost is paid only
+count, is what made the suite take eleven minutes. A new working directory starts with a
+cold cache, because jest keys its cache by absolute path. So none of that cost is paid only
 once.
 
 Turning the limit off is not the fix. Two workers at 2-3 GB each, multiplied by
 concurrent sessions, is the swap described above. Turning the typecheck off is, because
-`<build>` already runs it once over the same files, tests included (`tsconfig.json`
-includes `src/**/*`).
+`<build>` already runs it once over the same files, tests included, where the repo's
+`tsconfig.json` covers its test files - the learned file says whether it does.
 - **Raising a cap for a single run is fine** when you know the machine is otherwise
-  idle. Do it on the command line for that run; do not edit the matrix, and do not
-  carry the raised value into the next command.
+  idle. Do it on the command line for that run; do not edit the learned commands, and do
+  not carry the raised value into the next command.
 - **Never fix this by editing a service repo's `jest.config.js` or CI config.** The
-  constraint is this workspace's, not the service's, and `repos/` is read-only
-  anyway. If a repo should ship a different default, that is a task with a PRD.
+  constraint is this workspace's, not the service's. If a repo should ship a different
+  default, that is a task with a PRD.
 - **Node processes can outlive the session that started them.** `pgrep -fl jest`
   lists them; orphaned workers are safe to kill.
 
@@ -268,8 +282,8 @@ that plan first. Only write new journeys for gaps the plan does not cover.
 As a [role], I want to [action], so that [benefit]
 
 Example:
-As a player, I want my booking slot to be held the moment I check out,
-so that two people cannot pay for the same court at the same time.
+As a customer, I want my reservation to be held the moment I check out,
+so that two people cannot pay for the same slot at the same time.
 ```
 
 ### Step 2: Generate Test Cases
@@ -277,7 +291,7 @@ so that two people cannot pay for the same court at the same time.
 For each user journey, write the cases before any production code. Name the behavior, not
 the function.
 
-**Go** - table-driven, standard library, mirroring `internal/domain`:
+**Go** - table-driven, mirroring the package under test:
 
 ```go
 func TestBuildScheduleID(t *testing.T) {
@@ -308,10 +322,10 @@ func TestBuildScheduleID(t *testing.T) {
 }
 ```
 
-`sport` uses the standard library only. `player` also uses `stretchr/testify`; follow
-whichever style the surrounding package already uses rather than introducing the other.
+Follow the assertion style the surrounding package already uses - the standard library,
+or `stretchr/testify` where the repo has it - rather than introducing the other.
 
-**TypeScript** - Jest, mirroring `src/`:
+**TypeScript** - Jest or Vitest, mirroring the source tree:
 
 ```typescript
 describe('calculateCredit', () => {
@@ -437,7 +451,8 @@ In Go the same reasoning uses `go list -deps -test <pkg>`: a failing package who
 dependencies, its test files included, hold no changed package fails at `<base>` too.
 `testdata/` read from disk is the same exception as a fixture.
 
-Do not run a linter or formatter as part of this step in `backend`.
+Do not run a linter or formatter as part of this step where the repo's guidance says not
+to (see the rules above).
 
 ### Step 7b: The Blind-Spot Pass
 
@@ -458,8 +473,11 @@ altered**, find every path that produces it and confirm each one:
   tag - where a field can be built into the response and still arrive undefined
 - the detail route *and* the list route
 - mock, seeded, or sandbox responses, when the repo has a second path for them
-- any socket payload carrying the same object (`backend/src/services/io/<domain>/`)
+- any socket or event payload carrying the same object
 - both branches of a feature flag or version fork
+
+The learned file's `## Twin paths` names where this repo keeps each of these; start there,
+then grep, because the list is only as current as the last scan.
 
 Grep for the field name across the repo rather than reasoning about where it should be.
 The point of the sweep is to distrust the model's own map of the change, so use a tool
@@ -501,9 +519,9 @@ directories and two RED/GREEN gates, and both runs append to that same file. Eac
 its own section, headed with the repo it covers:
 
 ```markdown
-## backend
+## <repo>
 
-*Working directory: `spaces/<task>/backend/` · <YYYY-MM-DD>*
+*Working directory: `<workdir>` · <YYYY-MM-DD>*
 ```
 
 Read the file first if it is already there. Add your repo's section, or replace the one
@@ -546,7 +564,7 @@ tests that were not run.
 
 ## Test File Organization
 
-**Go** (`sport`, `player`) - tests live beside the code, same package:
+**Go** - tests live beside the code, same package:
 
 ```
 internal/
@@ -568,8 +586,8 @@ pkg/
 tests/                                 # cross-cutting / service-level
 ```
 
-**TypeScript** (`backend`) - Jest picks up both layouts, per `jest.config.js`
-(`testMatch: ['**/__tests__/**/*.ts', '**/?(*.)+(spec|test).ts']`, rooted at `src`):
+**TypeScript** - the runner's `testMatch` (or `include`) decides which layouts count; a
+repo often allows both of these:
 
 ```
 src/
@@ -578,7 +596,7 @@ src/
 │       ├── calculator.ts
 │       └── calculator.test.ts         # sibling style
 ├── api/
-│   └── public-api/tournament/leaderboard/
+│   └── orders/
 │       ├── __tests__/
 │       │   └── *.integration.test.ts  # __tests__ style
 └── utils/
@@ -586,13 +604,14 @@ src/
         └── credit-helper.test.ts
 ```
 
-Follow the layout already used by the directory you are editing. Do not introduce a second
-convention into a package that has one.
+Follow the layout already used by the directory you are editing - the learned file's
+`## Test layout` records the repo's. Do not introduce a second convention into a package
+that has one.
 
 ## Isolating External Dependencies
 
-The services talk to Postgres, Redis, RabbitMQ, EMQX, gRPC peers, Firebase, S3, and payment
-providers. Unit tests must not reach any of them.
+A service talks to databases, caches, queues, brokers, RPC peers, object storage, and
+third-party providers. Unit tests must not reach any of them.
 
 **Go** - define the narrow interface at the consumer and pass a fake:
 
@@ -617,19 +636,19 @@ func TestCheckoutReturnsPaymentReference(t *testing.T) {
 ```
 
 Prefer an interface owned by the package under test over a generated mock. For repository
-tests that genuinely need SQL, follow the pattern already used in
-`internal/app/repository/*_test.go` in the repo you are in.
+tests that genuinely need SQL, follow the pattern the repo already uses - the learned
+file's `## Isolation` names it.
 
 **TypeScript** - `jest.mock` the module boundary, not the internals:
 
 ```typescript
-jest.mock('@/services/payment-provider/xendit', () => ({
+jest.mock('@/services/payment-provider', () => ({
   createInvoice: jest.fn(() => Promise.resolve({ id: 'inv_123', status: 'PENDING' })),
 }))
 ```
 
-Global setup lives in `src/config/jest.setup.ts`; check it before adding per-file setup that
-may already be handled there.
+Check the repo's global test setup (`setupFiles`, `setupFilesAfterEnv`, a `TestMain`)
+before adding per-file setup that may already be handled there; the learned file names it.
 
 ## Common Testing Mistakes to Avoid
 
@@ -651,7 +670,7 @@ got, err := uc.List(ctx, venueID)
 
 ```bash
 go test ./internal/domain
-# ok  getswing.app/sport-service/internal/domain  (cached)   <- proves nothing
+# ok  example.com/orders-service/internal/domain  (cached)   <- proves nothing
 ```
 
 ### CORRECT: Force execution at the gate
@@ -663,14 +682,14 @@ go test -count=1 ./internal/domain
 ### WRONG: Time and timezone assumptions
 
 ```go
-date := time.Now()  // test passes today, fails in Jakarta at 23:45
+date := time.Now()  // test passes today, fails at 23:45 in UTC+7
 ```
 
 ### CORRECT: Fixed, explicit instants
 
 ```go
-jakarta, _ := time.LoadLocation("Asia/Jakarta")
-date := time.Date(2026, time.August, 20, 23, 45, 0, 0, jakarta)
+utc7 := time.FixedZone("UTC+7", 7*60*60)
+date := time.Date(2026, time.August, 20, 23, 45, 0, 0, utc7)
 ```
 
 ### WRONG: No test isolation
@@ -708,7 +727,7 @@ subtests, and be explicit about `t.Parallel()` when you use it.
 ## Success Metrics
 
 - Every changed behavior has a test that was RED before the change and GREEN after
-- Full suite passing for each service touched
+- Full suite passing for each repo touched
 - Build/typecheck clean
 - No skipped or disabled tests introduced
 - Race detector clean for concurrency changes
