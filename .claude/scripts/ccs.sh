@@ -196,6 +196,36 @@ check_path_layout() {
   [ "$bad" -eq 0 ] && ok skills "no skill or agent names a path layout - they work where they are handed"
 }
 
+# An agent's description is what a session reads when deciding to spawn it, so
+# it says when the flow calls the agent. "PROACTIVELY" or "MUST BE USED" pulls
+# sessions into spawning it without the working directory and base ref it
+# needs. And an agent is reached by something: a command names it in
+# backticks, or its description says it is run by hand. One with neither was
+# imported and never wired in. ccs-conventions holds the rest of the rules;
+# these two are the ones a text match can check without false alarms.
+check_agents() {
+  local f name desc n=0 bad=0
+  for f in "$CLAUDE_DIR"/agents/*.md; do
+    [ -f "$f" ] || continue
+    n=$((n+1))
+    name="$(basename "$f" .md)"
+    desc="$(sed -n 's/^description: *//p' "$f" | head -1)"
+    case "$desc" in
+      *PROACTIVELY*|*"MUST BE USED"*)
+        finding med agents "agents/$name.md's description says PROACTIVELY or MUST BE USED - sessions spawn it off the flow; say when the flow calls it instead"
+        bad=$((bad+1)) ;;
+    esac
+    if ! grep -qF "\`$name\`" "$CLAUDE_DIR"/commands/*.md 2>/dev/null; then
+      case "$desc" in
+        *"by hand"*) ;;
+        *) finding med agents "agents/$name.md is named by no command and its description does not say it is run by hand - nothing reaches it"
+           bad=$((bad+1)) ;;
+      esac
+    fi
+  done
+  [ "$bad" -eq 0 ] && ok agents "every agent ($n) is reached by a command or run by hand, and none claims to be used proactively"
+}
+
 check_docs_commands() {
   local c bad=0
   for c in $(grep -rhoE '(^|[ `(])/[a-z][a-z0-9-]{2,}' \
@@ -441,6 +471,7 @@ cmd_check() {
   check_skills
   check_skill_facts
   check_path_layout
+  check_agents
   check_settings
   check_guard
   check_docs_commands

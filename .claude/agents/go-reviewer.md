@@ -1,6 +1,6 @@
 ---
 name: go-reviewer
-description: Expert Go code reviewer specializing in idiomatic Go, concurrency patterns, error handling, and performance. Use for all Go code changes. MUST BE USED for Go projects.
+description: Go code reviewer - idiomatic Go, concurrency, error handling, security, and performance. /plan-prd dispatches it in its review step for a repo with a go.mod at its root, handing it a working directory and a base ref.
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---

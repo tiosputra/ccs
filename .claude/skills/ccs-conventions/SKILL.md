@@ -58,18 +58,24 @@ is a new line in the script, not a new paragraph in the command.
 **Almost never build an agent.** Agents start with no context and cannot write
 back to the session that spawned them. Workspace bookkeeping needs exactly the
 context the main session has — the task name, the PRD, the URL that just came
-back from `gh`. The reviewers (`go-reviewer`, `typescript-reviewer`) earn their
-place because review genuinely benefits from a fresh reading of a diff.
+back from `gh`. The reviewers (`go-reviewer`, `typescript-reviewer`,
+`react-reviewer`, `flutter-reviewer`, `database-reviewer`) earn their place
+because review genuinely benefits from a fresh reading of a diff.
 `tdd-guide` earns its place differently: it runs one repo's `tdd-workflow` cycle
 so a multi-repo milestone can run its repos in parallel. It carries no method of
 its own — it reads the skill — and it returns its evidence rather than writing a
-shared file. Nothing about managing the workspace benefits from an agent.
+shared file. The build resolvers (`go-build-resolver`, `dart-build-resolver`)
+are outside the flow on purpose: a build broken mid-cycle is the implementing
+session's to fix, so they are run by hand, for a build broken by a pull or a
+branch switch. Nothing about managing the workspace benefits from an agent.
 
 An agent imported from elsewhere is adapted before it is used, the way these
 were: it is handed one working directory and stops without one, it names the
 skill it follows instead of restating a method, it says what it may write and
 that it never commits, and its `description` says when the flow calls it —
-never "use PROACTIVELY", which pulls sessions off the flow.
+never "use PROACTIVELY", which pulls sessions off the flow. `/ccs` checks the
+last part: no description says `PROACTIVELY` or `MUST BE USED`, and every agent
+is named by a command or says it is run by hand.
 
 ## Writing a command
 
