@@ -172,6 +172,11 @@ project and the facts are measured once per repo instead of on every load:
   `repos/<name>`, not `space.sh`; a skill is handed a working directory and works
   there. `/ccs` flags a skill or agent that names a repo this machine knows — a
   checkout under `repos/`, or one something was learned about.
+- A skill that describes a repo rather than code written in it — who a path
+  faces, where an app routes links — may learn reference-only repos too. It
+  says so with `learns-reference: true` beside `learns: true`; `qa-release-note`
+  does, because the app that routes links is usually a reference repo. Every
+  other skill leaves reference repos out, since nobody writes code there.
 - Not every skill learns. One or two facts do not earn a learned file and a
   fingerprint; a repo's own `AGENTS.md` is enough. When a team writes down what a
   learned file had been guessing, the learned file gets shorter, not longer.

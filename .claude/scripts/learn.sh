@@ -102,6 +102,28 @@ fm_list() {
 skill_file()   { printf '%s\n' "$CLAUDE_DIR/skills/$1/SKILL.md"; }
 learned_file() { printf '%s\n' "$LEARNED/$2/$1.md"; }            # <skill> <repo>
 
+# A skill that describes a repo rather than code written in it - which app
+# routes a link, how a service ships - may learn reference-only repos too.
+# It says so with `learns-reference: true`.
+skill_learns_reference() {
+  frontmatter "$(skill_file "$1")" 2>/dev/null \
+    | grep -qE '^[[:space:]]*learns-reference:[[:space:]]*true[[:space:]]*$'
+}
+
+# The repos a skill learns about: the workable ones, plus the reference-only
+# ones when the skill asks for them.
+skill_repos() {
+  local d n
+  repo_names
+  skill_learns_reference "$1" || return 0
+  has_checkouts || return 0
+  for d in "$ROOT"/repos/*/; do
+    [ -e "$d/.git" ] || continue
+    n="$(basename "$d")"
+    is_reference_repo "$n" && printf '%s\n' "$n"
+  done
+}
+
 skill_learns() {
   frontmatter "$(skill_file "$1")" 2>/dev/null \
     | grep -qE '^[[:space:]]*learns:[[:space:]]*true[[:space:]]*$'
@@ -122,11 +144,11 @@ pair_problem() {
   skill_learns "$skill" || { echo "'$skill' does not learn - its frontmatter has no 'learns: true'"; return 0; }
   [ -f "$CLAUDE_DIR/skills/$skill/discover.md" ] \
     || { echo "'$skill' learns but has no discover.md - nothing says what to look for"; return 0; }
-  if is_reference_repo "$repo"; then
+  if is_reference_repo "$repo" && ! skill_learns_reference "$skill"; then
     echo "'$repo' is reference-only - nobody writes code there, so there is nothing to learn for"; return 0
   fi
   [ -n "$(repo_dir "$repo")" ] \
-    || { echo "no workable repo named '$repo' - workable: $(repo_names | tr '\n' ' ')"; return 0; }
+    || { echo "no repo named '$repo' for $skill - it learns: $(skill_repos "$skill" | tr '\n' ' ')"; return 0; }
   return 1
 }
 
@@ -228,7 +250,7 @@ cmd_status() {
     || die "'$only' is not a skill that learns (no 'learns: true' in its frontmatter)"
   for skill in $(learning_skills); do
     [ -z "$only" ] || [ "$skill" = "$only" ] || continue
-    for repo in $(repo_names); do status_row "$skill" "$repo"; done
+    for repo in $(skill_repos "$skill"); do status_row "$skill" "$repo"; done
   done
 }
 

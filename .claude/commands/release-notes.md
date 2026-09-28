@@ -1,7 +1,7 @@
 ---
 description: Turn a stated list of pull requests into a deployment runbook with a QA-readable release note
 argument-hint: "<name>, then the PR URLs one per line"
-allowed-tools: Bash(.claude/scripts/release-notes.sh:*), Read, Write, Glob, Grep
+allowed-tools: Bash(.claude/scripts/release-notes.sh:*), Bash(.claude/scripts/learn.sh:*), Read, Write, Glob, Grep
 ---
 
 ## Arguments
@@ -9,8 +9,8 @@ allowed-tools: Bash(.claude/scripts/release-notes.sh:*), Read, Write, Glob, Grep
 ```
 /release-notes hotfix-m51
 
-https://github.com/Getswing-Team/sport-service/pull/1053
-https://github.com/Getswing-Team/player-service/pull/599
+https://github.com/<org>/<repo>/pull/1053
+https://github.com/<org>/<other-repo>/pull/599
 ```
 
 The name is the first token. The pull requests follow, one per line — blank
@@ -25,36 +25,31 @@ own quoted argument.
 
 ## What this is
 
-A release here is **whatever pull requests the user names**. Nothing infers it,
-and nothing should try. `sport`, `payment`, `player`, `backend` and `admin` all
-merged `feature/m5.1` into `main` on 2026-09-02, but the same wave also merged
-`hot/…` and `5.1-additional/…` straight to `main`, and `mobile` uses a scheme of
-its own. There is no identifier a script could resolve.
+A release is **whatever pull requests the user names**. Nothing infers it, and
+nothing should try: one wave routinely merges a feature branch into several
+repos and, the same day, hotfix branches straight into the same base, while an
+app ships on a scheme of its own. There is no identifier a script could resolve.
 
 The output is one file, `release/<date>-<name>.md`: a deployment runbook whose
 headline section is a **release note** — plain-language behavioural assertions
-the user pastes to their QA team.
+the user pastes to their QA team. The `qa-release-note` skill is how that note
+is written; read it before writing one. If `release/` already holds a runbook,
+the newest one is the house example — read it too.
 
-`release/2026-09-02-5.1.md` is the reference implementation. Read it before
-writing a new one.
+## Rules that are not matters of judgment
 
-## Two rules that are not matters of judgment
+**Every release fact comes from `gh`.** State, size, checks, diffs and file
+lists come from the pull requests. A local checkout is only as fresh as its last
+fetch, and a stale one has reported a repo as having nothing to release, and a
+22-file change against a real 51. The script reads `repos/` only for slow-moving
+architecture — deploy workflows, contract copies, an app's route registry — and
+always at the repo's default branch, never from a working tree a task may have
+moved.
 
-**Never read `repos/` for a release fact.** Those checkouts cannot be refreshed
-from a session — `guard.sh` blocks `git fetch` under `repos/` — so they are only
-as fresh as their last fetch. On 2026-09-03 `sport`'s local `main` was four
-merged PRs behind. Reading them once reported `payment` as having nothing to
-release and `player` as a 22-file change against a real 51. Every release fact
-comes from `gh`. `repos/` is for slow-moving architecture only, and the script
-has already read what it needs from there.
-
-**Never read `spaces/` at all.** When you do need architecture the script did
-not print — how a package is wired, what a handler already did — read it under
-`repos/<repo>/`, never under `spaces/<task>/<repo>/`. A space is a worktree on
-somebody's task branch carrying half-finished and uncommitted work, so it
-describes that task rather than the service. That a space happens to be newer
-than `repos/` is not a reason to prefer it: a release is described by what is on
-the pull requests, and `gh` already gave you that.
+**Never read a task's working directory for a release.** Whether it is a space
+under `spaces/` or a checkout an in-place task holds, it carries one task's
+unfinished work, not the service. When you need architecture the script did not
+print, read it at the default branch: `git -C repos/<repo> show origin/HEAD:<path>`.
 
 **Never merge, deploy, or trigger a workflow.** This command reads and writes
 one file. If the user asks it to merge, say what would deploy on merge and stop.
@@ -73,18 +68,30 @@ of the arguments, then:
 One quoted argument per URL — never paste the raw multi-line block into the
 shell. If the arguments carry no URL, ask for them and stop.
 
-It prints one `pr` line per URL and, under `missed`, other open PRs into the
+It prints one `pr` line per URL, an `alias` line mapping each repo to its
+checkout under `repos/` (or `-`), and, under `missed`, other open PRs into the
 same base that the user did **not** name.
 
-Those `missed` lines matter. The top blocker of the 2026-09-02 release was four
-PRs carrying content already inside the release PRs, with squash merge enabled —
-merging any of them lands the same content under a new SHA. Every one was merged
-anyway. **Surface the missed list to the user before the expensive read**, in one
-short paragraph. Do not stop for approval; they may ignore it.
+Those `missed` lines matter. Duplicate PRs carrying content already inside the
+release PRs, with squash merge on, land the same content twice under new SHAs —
+that has been the top blocker of a release before. **Surface the missed list to
+the user before the expensive read**, in one short paragraph. Do not stop for
+approval; they may ignore it.
 
-If the roll call reports no URLs, ask for them and stop.
+### 2. Check what has been learned
 
-### 2. Gather
+```
+.claude/scripts/learn.sh status qa-release-note
+```
+
+The `surface` and `deeplink` records come from each repo's learned
+`qa-release-note` file. For a repo in the release whose row is `missing` or
+`stale`, say so in one line and offer `/learn qa-release-note <repo>` — do not
+start learning unasked. The app that routes links is usually a reference repo;
+it can still be learned for this skill. Without learned facts the report still
+runs; it prints a `learn` record where a surface would have been.
+
+### 3. Gather
 
 ```
 .claude/scripts/release-notes.sh report <name> <url...>
@@ -99,138 +106,60 @@ Records it prints, all tab-separated:
 | `env` | an env key an added line reads, **and the file it was read in** |
 | `migration` | a migration file the PR adds |
 | `deploy` | what merging actually does, per repo |
-| `proto` | a changed proto, and which other repos carry a copy |
-| `deeplink` | a link an added line emits, checked against the app's route registry |
-| `surface` | who a changed file faces, or which channel it arrives on |
+| `proto` | a changed contract file, and which other checkouts carry a copy |
+| `deeplink` | a link an added line emits, checked against the app's learned route registry |
+| `surface` | who a changed file faces, from the repo's learned surfaces |
+| `learn` | a repo whose surfaces were not learned, so none are reported for it |
 | `test` | an added or removed test assertion — the extraction engine |
 | `gap` | a changed source file with no test touched in the same directory |
 
 For anything the records do not settle — why a change was made, what it means
-for a player — read the PR diff. One reader per repo is reasonable for a large
-release; keep synthesis in this session.
+for the people using it — read the PR diff. One reader per repo is reasonable
+for a large release; keep synthesis in this session.
 
-### 3. Judge the records
+To see what the script makes of one diff without `gh` — a saved diff, a PR you
+are debugging — `release-notes.sh facts <org/repo> <diff-file>` prints the local
+records alone.
 
-The script over-reports on purpose. Four calls are yours:
+### 4. Judge the records and extract the note
 
-**`env` — read the file path, not just the key.** A key read in
-`internal/infrastructure/config/config.go` is service configuration and belongs
-in the deployment config. A key read in `cmd/<tool>/main.go` is a one-off run
-by hand and **must not** go into the deployment config. Player's credit backfill
-reads `BACKEND_DB_DSN` and `SPORT_DB_DSN`; both are wrong to deploy.
-
-**`gap` — filter to user-visible behaviour.** The heuristic is per-directory, so
-it flags interface files, DTOs and registries that are covered from elsewhere.
-Keep a gap only when the file changes behaviour someone could notice. Two real
-ones from `sport` #1040: the cashback narrowing in `order/create.go` and the
-admin `booking_statuses` filter. Both are worth a line; a changed DTO is not.
-
-**`deeplink` — the scheme is configurable and means nothing.** The host is what
-the app routes on. `NOT-IN-THE-APPS-REGISTRY` has three readings: another app's
-link (`dana://pay`), a test sentinel, or **a link our own code emits that
-nothing will open**. Only the third is a finding. Note that the app's checkout is
-usually a reference repo and only as fresh as its last fetch, so say the app may
-have added the route since.
-
-**`test` — filter, translate, pair.** See below.
-
-### 4. The extraction engine
-
-The team already writes the QA section inside test names; it just never leaves
-the repo. `test` records carry it out.
-
-- **Filter** the unit-internal ones. From the 5.1 wave: `TestIsUniqueViolation`
-  and its cases ("postgres duplicate key text", "sqlstate code alone"),
-  `TestMain`, `TestNextReferralCode`, error-plumbing (`…PropagatesLookupErrors`).
-  Roughly 15 of ~110. If a QA reader could not observe it, drop it.
-- **Pair** each `-` record with the `+` that replaced it. That pair *is* the
-  behaviour change, and it gives you `was:` / `now:` for free:
-  `publishes for every player` → `publishes for owner only`.
-- **Translate** into product words. "owner" → "the person who made the booking".
-  Never leave a Go identifier in the release note.
-- **Add the unchanged guards** — the lines tests cannot supply. `sport` and
-  `backend` now use deliberately different referral rules, so *golf tee-times
-  still reward an added player's referrer* belongs beside the change.
+The script over-reports on purpose. The judgments — `env` by file path, `gap`
+filtered to what someone could notice, `deeplink` by host, and turning `test`
+records into the note by filtering, pairing, translating and adding unchanged
+guards — are the `qa-release-note` skill's. Follow it, together with each repo's
+learned file.
 
 ### 5. Write `release/<date>-<name>.md`
 
-Sections, following the reference runbook:
+Sections, in this order:
 
 1. At a glance — PR table, blockers, themes, blast radius
-2. **Release note** — §6 below
+2. **Release note** — written per the `qa-release-note` skill
 3. What changed, per repo
 4. Cross-service contracts
 5. Deploy order, with the `deploy` records as a "merging is deploying" table
 6. Data work — migrations, and any manual step such as a backfill
-7. External configuration — env keys, third parties, mobile, admin
+7. External configuration — env keys, third parties, consumer apps
 8. Rollback, **including durable residue**
 9. Risks and watch items
 10. Pre-deploy checklist and sign-offs
 11. Post-deploy verification
 12. Open questions for the release owner
 
-Two of those are required rather than optional, because both were the strongest
-part of the reference runbook and both are easy to lose on a blank page:
-
-- **Rollback residue** — durable side effects that survive a code rollback:
-  referral codes already handed out, notification rows already written,
-  backfilled data. Say explicitly what must *not* be cleaned up.
-- **Diff against the previous release note.** The roll call prints `prev`. Read
-  it, carry forward its unresolved watch items, and flag reversals. The 09-02
-  runbook reversed the 08-31 one's guidance to finance about referral volume
-  four days later; nothing but this check catches that.
-
-### 6. The release note section
-
-Self-contained. **No reference points outside it** — no `§4`, no `W7`, no PR
-numbers. It gets pasted into Slack, where those dangle.
-
-```
-────────────────────────────────────────────────
-1. REFERRAL REWARD — who converts       ⚠ CHANGED
-────────────────────────────────────────────────
-was:  every player on a finished multisport order rewarded their referrer
-now:  only the player who made the booking
-
-- a referred player who MADE the booking, booking finishes
-  → their referrer is rewarded
-- a referred player who was only ADDED to someone else's order
-  → their referrer is NOT rewarded
-- the booker has no account (POS walk-in) → nobody is rewarded
-
-  Golf tee-times are deliberately NOT changing:
-- a player added to someone else's tee-time STILL rewards their referrer
-```
-
-Rules:
-
-- **No screens, no navigation, no steps.** QA knows the app. They need to know
-  what should be true, not where to click. Do not name a screen the diff cannot
-  prove exists.
-- **Group by feature, never by repo.** QA does not know which service moved.
-- `was:` / `now:` only on deliberate changes. A bare line is something that
-  should already be true and must stay true.
-- **One noun per actor, used consistently.** The referral change has four
-  easily-confused actors — referred player, referrer, order owner, invitee. Fix
-  one word for each and never vary it. This is the likeliest way the section
-  misleads.
-- Use a before/after table where the diff hands you one directly — the receipt
-  wording table came straight out of the old and new expected values in a single
-  test case.
-- Mark an untested behaviour change `⚠ NO TEST COVERS THIS — verify by hand`.
-- Close with **not in this release** (work carried on the branch that already
-  shipped) and **not reachable by QA** (gRPC, jobs, one-off scripts).
-
-Scale check: the 5.1 wave produced 12 sections from ~110 assertions.
+Two of those are required rather than optional — rollback residue, and the diff
+against the previous release note. The roll call prints `prev` for the latter.
+The skill says what each must hold.
 
 ## What to refuse
 
 - **Do not infer the PR list.** If the user names a milestone instead of URLs,
-  ask for the URLs. There is no branch that identifies a release here.
-- **Do not read `repos/` for release facts**, and do not report a divergence,
-  file count or commit from a local checkout.
-- **Do not read `spaces/` for anything.** Architecture comes from `repos/`; a
-  space is one unfinished task, not the service.
+  ask for the URLs. There is no branch that identifies a release.
+- **Do not read a local checkout for release facts**, and do not report a
+  divergence, file count or commit from one.
+- **Do not read a task's working directory for anything.** Architecture comes
+  from the default branch.
+- **Do not guess a surface or a route.** A repo with no learned facts gets a
+  `learn` record; say so rather than inferring the audience from a folder name.
 - **Do not merge, push, deploy, or trigger a workflow**, and do not offer to.
 - **Do not invent a test assertion.** If a behaviour has no `test` record, mark
   it as untested — never write a plausible-sounding line as though extracted.
