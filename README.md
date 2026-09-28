@@ -53,12 +53,13 @@ experiment, with no stashing and no `git checkout` whiplash between them.
 │       ├── ccs.sh          checks the workspace system itself
 │       ├── learn.sh        which learned facts exist, and whether they are stale
 │       ├── graph.sh        code-review-graph graphs, kept outside the repos they describe
-│       └── guard.sh        PreToolUse hook - keeps checkouts sealed unless a task holds them
+│       └── guard.sh        PreToolUse hook - never deletes a source branch; reference repos read-only
 ```
 
-`repos/<repo>` is sealed unless a task holds it: an in-place task holds a
-checkout while it is on the task branch, and nothing else may write there.
-Repos listed in `REFERENCE_REPOS` are read-only everywhere.
+`repos/<repo>` is writable, like a space's worktree - files and git alike. What
+the guard refuses is deleting or renaming a source branch (a task's base, the branch
+a task returns a checkout to, `TASK_DEFAULT_BASE`, the remote's default branch), in
+`repos/` or a space. Repos listed in `REFERENCE_REPOS` are read-only everywhere.
 
 A repo that carries an `AGENTS.md` carries its team's rules for that codebase,
 and those rules outrank this workspace's skills and conventions wherever the two
@@ -358,9 +359,9 @@ no task and no `/pr`; `ccs-conventions` describes how its pieces are shaped.
 
 ## Rules
 
-- `repos/<repo>` is sealed unless an in-place task holds it — see `CLAUDE.md`. A
-  `PreToolUse` hook (`.claude/scripts/guard.sh`) enforces it, so this is not a
-  matter of judgment.
+- A source branch is never deleted, and reference repos are read-only — see
+  `CLAUDE.md`. A `PreToolUse` hook (`.claude/scripts/guard.sh`) enforces both, so
+  this is not a matter of judgment.
 - Read a repo's `AGENTS.md` before planning or writing in it, and follow it over
   any skill here. It belongs to that repo's team: change it in a task, through
   `/pr`, and never restate it under `.claude/`.
