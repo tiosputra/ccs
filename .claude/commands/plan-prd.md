@@ -174,6 +174,11 @@ Both dates come from `date +%F` in `YYYY-MM-DD`. *Created* is written once and n
 changes; *Last updated* is bumped every time the file is edited afterwards — at Gate 1
 corrections, when the task is started, and when a milestone flips to complete.
 
+Write **Acceptance Criteria** with the `intent-driven-development` skill: 3-7 criteria for
+a low-risk change; for a security, data, migration or cross-repo change, its full form,
+whose risk review fills **Risks** and whose blocking decisions are Phase 3.5 questions.
+A criterion you cannot make observable is an Open Question, not a vague AC.
+
 #### PRD Template
 
 ```markdown
@@ -223,6 +228,18 @@ We'll know we're right when **{measurable outcome}**.
 
 **Out of scope**
 - {item} — {why deferred}
+
+## Acceptance Criteria
+<!-- Observable behavior, per the intent-driven-development skill. Numbered per task, -->
+<!-- never reused; a later milestone continues the sequence. -->
+
+### AC-001: {observable behavior}
+- **Scenario:** {starting condition}
+- **Action:** {single trigger}
+- **Expected:** {observable result}
+- **Must not:** {prohibited side effect, if any}
+- **Verification:** {automated test | integration check | manual review}
+- **Priority:** Required | Important | Optional
 
 ## Delivery Milestones
 <!-- Business outcomes, not engineering tasks. Each becomes its own plan. -->
@@ -364,7 +381,13 @@ Now run straight through. No further permission prompts; Gate 1 covered all of t
    finding the team will reject. Tell reviewers they can ask the graph
    who calls a function with `.claude/scripts/graph.sh run <task>/<repo> query callers_of <name>`:
    - Go (a `go.mod` at the repo root) -> `go-reviewer`
-   - TypeScript or JavaScript -> `typescript-reviewer`
+   - TypeScript or JavaScript -> `typescript-reviewer`, plus `react-reviewer` when the diff
+     touches `.tsx` or `.jsx`
+   - Flutter or Dart (a `pubspec.yaml` at the repo root) -> `flutter-reviewer`
+   - And, whatever the language, `database-reviewer` when the diff touches migrations,
+     `.sql` files, or query code
+
+   A repo can take more than one reviewer; dispatch them together.
 
    Fix anything the review rates CRITICAL or HIGH, then re-run the affected tests. Report
    MEDIUM findings without necessarily fixing them; that is the user's call at Gate 2.
@@ -415,8 +438,13 @@ If milestones remain, offer the next one after the PR is open.
 
 - `/task` — start, locate or finish a task by hand, outside this flow.
 - `/plan` — plan a later milestone of an existing PRD on its own.
-- `tdd-workflow`, `go-reviewer`, `typescript-reviewer` — layout-blind; they are handed a
-  working directory and a base ref, never a task name.
+- `tdd-workflow` and the reviewer agents (`go-reviewer`, `typescript-reviewer`,
+  `react-reviewer`, `flutter-reviewer`, `database-reviewer`) — layout-blind; they are
+  handed a working directory and a base ref, never a task name.
+- `product-lens` — before this command, when it is not yet clear the idea is worth building.
+- `product-capability`, `architecture-decision-records` — after Gate 1, when a multi-repo
+  task's constraints or a settled trade-off need writing down; both land in the task's
+  directory.
 - `/pr` — the only thing that commits.
 
 ## Success criteria
