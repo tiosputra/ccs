@@ -77,6 +77,8 @@ sh_case allow 'cd repos/backend && cat package.json 2>&1'
 sh_case allow 'cd repos/backend && grep -rn foo src 2>/dev/null | head -5'
 sh_case allow 'cd repos/backend && npm ls > /tmp/out.txt'
 sh_case allow "cd repos/backend && npm ls > $ROOT/spaces/x.txt"
+sh_case allow 'cd repos/backend && npm ls > $SP/out.txt'
+sh_case allow 'cd repos/backend && npm ls > "$SCRATCH/out.txt" 2>&1'
 sh_case block 'cd repos/backend && echo hi > file.txt'
 sh_case block 'cd repos/backend && echo hi >> src/app.ts'
 sh_case block "cd repos/backend && echo hi > $ROOT/repos/backend/f.txt"

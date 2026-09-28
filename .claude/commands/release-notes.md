@@ -128,8 +128,9 @@ admin `booking_statuses` filter. Both are worth a line; a changed DTO is not.
 **`deeplink` — the scheme is configurable and means nothing.** The host is what
 the app routes on. `NOT-IN-THE-APPS-REGISTRY` has three readings: another app's
 link (`dana://pay`), a test sentinel, or **a link our own code emits that
-nothing will open**. Only the third is a finding. Note that `repos/mobile` is a
-reference checkout and stale, so say the app may have added the route since.
+nothing will open**. Only the third is a finding. Note that the app's checkout is
+usually a reference repo and only as fresh as its last fetch, so say the app may
+have added the route since.
 
 **`test` — filter, translate, pair.** See below.
 

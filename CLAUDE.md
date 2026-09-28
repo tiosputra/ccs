@@ -1,38 +1,45 @@
 # Workspace rules
 
-## Git is allowed in spaces, never in repos/
+## Work happens in a task's working directories
 
-`git add`, `git commit`, and `git push` are expected inside `spaces/<task>/<repo>/` -
-`/pr` uses them to turn finished work into a pull request. What stays forbidden is
-touching `repos/` at all. The guard hook enforces this; it is not a matter of judgment.
+Every change belongs to a **task**, and a task works in one directory per repo it
+touches. Where those are is the task's **isolation**, chosen when it starts:
+
+| | In place (default) | Space (`--space`) |
+|---|---|---|
+| Working directory | `repos/<repo>`, switched to the task branch | `spaces/<task>/<repo>`, a git worktree |
+| Use when | the usual case | parallel tasks on one repo, long-lived work, or the repo is busy |
+
+**Never build a working directory yourself — ask for it:**
+
+```bash
+.claude/scripts/task.sh where <task> <repo>
+```
+
+If a task has not started yet, start it with `/task start <task> <repos> --from <ref>`
+(add `--space` for a space) before editing anything. `/plan-prd` does this at Gate 1.
+
+### repos/ is sealed unless a task holds it
+
+`repos/<repo>` is the repo's own checkout. It is writable only while an in-place
+task holds it: its HEAD is on that task's branch, and the task's metadata lists the
+repo. Otherwise it is read-only — no edits, no generators, no `git checkout` or
+`git switch`, nothing that moves it. Only `task.sh` switches a checkout's branch.
+
+Inside a checkout a task holds, `git add`, `git commit`, and `git push` of the task
+branch are allowed — `/pr` uses them. Pushing any other branch is not: work reaches
+the base branch through a pull request, never directly. A space's worktrees allow
+the same. The guard hook enforces all of this; it is not a matter of judgment.
 
 Commit when the work is done and reviewed, as part of `/pr`. Do not scatter checkpoint
 commits through an implementation run.
-
-## Writing on original repos is forbidden
-
-`repos/<repo>` are canonical, read-only checkouts. Never create, edit, delete,
-or run a code generator against a file under `repos/`. Reading is fine —
-writing is not, and neither is `git checkout`, `git switch`, or any command
-that moves a `repos/` checkout.
-
-All work happens in a space worktree:
-
-```
-spaces/<task>/<repo>/
-```
-
-If a task has no space yet, create one with `/space add <task>` before editing
-anything. If you find yourself about to write a path that starts with `repos/`,
-stop and rewrite it as `spaces/<task>/...`.
 
 ## Reference-only repos
 
 Some checkouts are here to be **read**, not worked on — a mobile client you
 need to understand a payload from, a partner service whose contract you are
-matching. For those, the escape hatch above does not apply: rewriting the path
-as `spaces/<task>/...` does not make the edit allowed, because a reference repo
-is read-only *everywhere*.
+matching. For those, nothing above applies: no task can hold one, in place or in
+a space, because a reference repo is read-only *everywhere*.
 
 Which ones is per machine, so no tracked file names them. They are
 `REFERENCE_REPOS` in the gitignored `.env` — a comma list of repo aliases:
@@ -41,10 +48,10 @@ Which ones is per machine, so no tracked file names them. They are
 REFERENCE_REPOS=mobile,partner
 ```
 
-Run `/space config` to see what this machine resolves to, or `/space repos`,
+Run `/task config` to see what this machine resolves to, or `/task repos`,
 which marks them in the roster. The guard hook reads the same setting and
-refuses writes to `repos/<repo>/…` and `spaces/<task>/<repo>/…` alike; `/space
-add` gives them no worktree, and refuses outright if you name one.
+refuses writes to them in `repos/` and in every space alike; `/task start`
+leaves them out, and refuses outright if you name one.
 
 Reading, searching, `git log`, `git diff`, answering questions about them —
 all fine, and the point. If a change genuinely belongs in one, say so and stop:
@@ -58,14 +65,13 @@ repo, and follow it. **Where it disagrees with a workspace skill, a
 `.claude/learned/<repo>/` file, or a general convention, `AGENTS.md` wins** —
 it was written by the people who own that code, about that code.
 
-- Read the copy in the checkout you are working in, `spaces/<task>/<repo>/AGENTS.md`.
-  A space is a worktree, so it carries its own; the one under `repos/` is the same
-  file, but reading it is not the habit to build.
+- Read the copy in the task's working directory for that repo — `task.sh where
+  <task> <repo>` — so you read the rules on the branch you are changing.
 - Not every repo has one. Where there is none, or where it is silent on the point,
   the workspace's skills and conventions apply exactly as before.
-- A task touching three repos obeys three `AGENTS.md` files, one per worktree.
-  Rules do not travel between repos — what `player` asks for says nothing about
-  `web`.
+- A task touching three repos obeys three `AGENTS.md` files, one per repo.
+  Rules do not travel between repos — what one repo asks for says nothing about
+  the next.
 - When following it means departing from a skill, say so once, in the plan or the
   wrap-up: "`<repo>`'s AGENTS.md asks for X, so the `logging` skill's Y does not
   apply here." Follow the repo; do not silently drop either.
@@ -77,19 +83,19 @@ libraries, what to log, which tools to reach for first, how to review. It does n
 govern **where work happens or how it ships**, which is this workspace's job and is
 the same for every repo:
 
-- `repos/` stays read-only, and a repo in `REFERENCE_REPOS` stays read-only
-  everywhere. A file inside a checkout cannot grant write access to that checkout;
-  the guard hook enforces this whatever an `AGENTS.md` says.
-- One task, one space, one `docs/<YYYY-MM-DD>_<task>/` directory, and the two
-  gates. A repo whose `AGENTS.md` describes its own plan-then-execute workflow
+- `repos/` stays sealed unless a task holds it, and a repo in `REFERENCE_REPOS`
+  stays read-only everywhere. A file inside a checkout cannot grant write access to
+  that checkout; the guard hook enforces this whatever an `AGENTS.md` says.
+- One task, one set of working directories, one `docs/<YYYY-MM-DD>_<task>/`
+  directory, and the two gates. A repo whose `AGENTS.md` describes its own plan-then-execute workflow
   describes work inside the repo; the task's `prd.md`, `plan.md`,
   `api-contract.md` and `testing.md` are still written, because they belong to the
   task rather than to any one repo. An `AGENTS.md` that says not to write a file
   unless asked is satisfied here: running `/plan-prd` or `/plan` is the asking.
 - Committing and the pull request stay with `/pr`.
 
-Editing a repo's `AGENTS.md` is itself a change to that repo: it happens in that
-repo's space and ships through `/pr`, never by writing into `repos/`. If a rule
+Editing a repo's `AGENTS.md` is itself a change to that repo: it happens in a
+task's working directory and ships through `/pr`, like any other change. If a rule
 belongs to the workspace rather than to one codebase, it belongs in this file
 instead.
 
@@ -101,7 +107,7 @@ the same thing in this workspace. Everything under `.claude/` calls it a
 
 | Artifact | Path / name |
 |---|---|
-| Space (worktrees) | `spaces/<task>/<repo>/` |
+| Working directories | `task.sh where <task> <repo>` — `repos/<repo>` in place, `spaces/<task>/<repo>/` for a space |
 | Branch | `<prefix>/<task>` — see below |
 | Task docs | `docs/<YYYY-MM-DD>_<task>/` — everything written about the task |
 | PRD | `docs/<YYYY-MM-DD>_<task>/prd.md` |
@@ -110,16 +116,16 @@ the same thing in this workspace. Everything under `.claude/` calls it a
 | TDD evidence | `docs/<YYYY-MM-DD>_<task>/testing.md` — one section per repo |
 | Wrap-up log | `docs/<YYYY-MM-DD>_<task>/log.md` |
 | Supporting files | `docs/<YYYY-MM-DD>_<task>/<name>` — anything else the task produces |
-| Pull request | one per repo in the space, branch `<prefix>/<task>` -> the source branch |
+| Pull request | one per repo in the task, branch `<prefix>/<task>` -> the source branch |
 
-Pick the task name once, in kebab-case, at `/plan-prd` (or at `/space add`) and
+Pick the task name once, in kebab-case, at `/plan-prd` (or at `/task start`) and
 never rename it mid-flight.
 
 **One task, one directory.** Every document a task produces lives in
 `docs/<YYYY-MM-DD>_<task>/`, and no artifact goes anywhere else. The named files in
 the table are the **standard artifacts**: commands find them by exact name, so
 each is spelled exactly that way, once. Everything else the task produces — a
-backfill `.sql`, a `.csv` export, request examples, notes written for the mobile
+backfill `.sql`, a `.csv` export, request examples, notes written for a consumer
 team — is a **supporting file**, and sits in the same directory beside them, named
 for what it is. What never goes in is a second copy of a standard artifact under
 another name: `plan-v2.md`, `testing-backend.md`, `prd-old.md` are invisible to
@@ -139,13 +145,14 @@ whole task, with a section per repo, so a task spanning three services has one
 report rather than three.
 
 `<prefix>` is **not a fixed string** and no file in this repo states it. It is
-`SPACE_BRANCH_PREFIX`, resolved per machine: the environment, then a gitignored
+`TASK_BRANCH_PREFIX`, resolved per machine: the environment, then a gitignored
 `.env` at the workspace root, then a built-in default. Everyone's branches can
-differ; the task name never does.
+differ; the task name never does. (`SPACE_BRANCH_PREFIX`, its old name, is still
+read.)
 
-Never write a literal prefix into a doc, a PRD, or a plan. Run `/space config`
-to see what this machine resolves to, or read it off `/space add`'s output —
-it always prints the branch it actually created.
+Never write a literal prefix into a doc, a PRD, or a plan. Run `/task config`
+to see what this machine resolves to, or read it off `/task start`'s output —
+it always prints the branch it actually used.
 
 ## The two gates
 
@@ -153,11 +160,11 @@ A task runs start to finish in one session, stopping at exactly two points to as
 
 ```
 /plan-prd <idea> from branch <ref>
-   writes docs/<date>_<task>/prd.md - proposing the space, not creating it
+   writes docs/<date>_<task>/prd.md - proposing the task, not starting it
         |
    [GATE 1] you read the PRD and confirm
         |
-   creates the space -> plans -> implements test-first -> code review
+   starts the task -> plans -> implements test-first -> code review
         |
    [GATE 2] you confirm the work is ready
         |
@@ -169,11 +176,11 @@ each step - the confirmation at Gate 1 covers the whole build.
 
 ## One session, one task
 
-A session that has an active task works only inside that task's space. Do not
-edit files belonging to another `spaces/<other-task>/`, and do not widen the
-work to a repo that is not in the current space — add the repo to the space
-first with `/space add <task> <repo>`.
+A session that has an active task works only inside that task's working
+directories. Do not edit files belonging to another task, and do not widen the
+work to a repo that is not in the current task — add the repo first with
+`/task start <task> <repo>`.
 
-The active task is whichever one the session's PRD, plan, or `/space add` named.
+The active task is whichever one the session's PRD, plan, or `/task start` named.
 If the user asks for something outside it, say which task is active and ask
-whether to switch or to open a new space.
+whether to switch or to start a new task.

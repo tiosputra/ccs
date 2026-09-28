@@ -34,10 +34,10 @@ packages) are never parsed.
 
 ```
 /graph                                  every checkout and task, and whether its graph is fresh
-/graph build backend                    graph repos/backend
+/graph build <repo>                     graph that repo's own checkout
 /graph build all                        graph every checkout
 /graph review fix-promo                 blast radius of each repo in the task against its base
-/graph run fix-promo/backend query callers_of applyPromo
+/graph run fix-promo/<repo> query callers_of applyPromo
 /graph prune                            graphs left behind by a task that is gone
 ```
 
@@ -149,7 +149,7 @@ Relay the message. It names what exists. Do not guess another target.
 - **Running `code-review-graph` directly.** Without the script it writes into
   the repo it reads. If an `error` row says the tool wrote inside a checkout,
   stop and tell the user. Never delete from `repos/` yourself.
-- **Running `code-review-graph install`.** Measured against `repos/backend` on
+- **Running `code-review-graph install`.** Measured against a service checkout on
   2026-09-16 it writes 15 files into the repo it targets — six MCP configs,
   eight instruction files including an append to that repo's `CLAUDE.md`, and a
   `.gitignore` edit — plus a `PostToolUse` hook that rebuilds the graph bare,

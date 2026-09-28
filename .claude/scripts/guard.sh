@@ -348,6 +348,8 @@ def redirect_reason(target):
         return None                        # fd duplication writes no file
     if target.startswith("/dev/"):
         return None                        # /dev/null, /dev/stderr, /dev/fd/N
+    if "$" in target or "`" in target:
+        return None                        # unexpanded - its value is not known here
     return seal_reason(target, EFF)
 
 for m in REDIRECT.finditer(cmd):

@@ -176,6 +176,26 @@ check_skill_facts() {
   [ "$bad" -eq 0 ] && ok skills "no skill or agent names a repo this machine knows ($(known_repo_names | wc -l | tr -d ' ') known)"
 }
 
+# Skills and agents are handed a working directory; they never build one. A
+# path layout named in one - spaces/, space.sh, a concrete repos/<name> - is
+# the task machinery leaking into the method, and breaks the moment a task
+# works the other way. ccs-conventions describes that machinery, so it is the
+# one skill allowed to name it.
+check_path_layout() {
+  local f hits bad=0
+  for f in "$CLAUDE_DIR"/skills/*/*.md "$CLAUDE_DIR"/agents/*.md; do
+    [ -f "$f" ] || continue
+    case "$f" in */skills/ccs-conventions/*) continue ;; esac
+    hits="$(grep -cE 'spaces/|space\.sh|repos/[a-z]' "$f" 2>/dev/null)"
+    [ -n "$hits" ] || hits=0
+    if [ "$hits" -gt 0 ]; then
+      finding med skills "${f#$ROOT/} names a path layout $hits time(s) - a skill works in the directory it is handed; task.sh where decides where that is"
+      bad=$((bad+1))
+    fi
+  done
+  [ "$bad" -eq 0 ] && ok skills "no skill or agent names a path layout - they work where they are handed"
+}
+
 check_docs_commands() {
   local c bad=0
   for c in $(grep -rhoE '(^|[ `(])/[a-z][a-z0-9-]{2,}' \
@@ -420,6 +440,7 @@ cmd_check() {
   check_commands
   check_skills
   check_skill_facts
+  check_path_layout
   check_settings
   check_guard
   check_docs_commands

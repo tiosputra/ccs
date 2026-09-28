@@ -1,88 +1,91 @@
 Inspired by : https://github.com/affaan-m
 
 
-# swing
+# ccs
 
-A control workspace for working on the Getswing services in parallel.
+A Claude Code workspace for working on one or more service repos, task by task.
 
-Instead of one checkout per service and a lot of branch-switching, this
-workspace keeps **one canonical checkout per service** and hands each task its
-own set of git worktrees. A task gets its own directory, its own branch across
-every service it touches, and its own wrap-up note when it's done.
+Clone it next to the repos you work on, put those repos in `repos/`, and every
+task gets the same flow: a PRD you confirm, a plan, a test-first build, a code
+review you confirm, and one pull request per repo. Nothing in it names a
+project, so the same clone pattern works for a single small service and for a
+dozen that change together.
 
-That means several tasks can be open at once — a hotfix, a feature, an
-experiment — each fully isolated, with no stashing and no `git checkout`
-whiplash between them.
+A task works **in place** by default — in each repo's own checkout, switched to
+the task branch — which is all a simple project needs. When a task needs
+isolation, start it with `--space` and it gets its own git worktrees instead, so
+several tasks can be open on the same repo at once: a hotfix, a feature, an
+experiment, with no stashing and no `git checkout` whiplash between them.
 
 ## Layout
 
 ```
-swing/
-├── repos/                  canonical checkouts — the source of truth
-│   └── <service>/              one clone per service, however many there are
+<workspace>/
+├── repos/                  your checkouts — cloned here, one per repo
+│   └── <repo>/                 in place, a task works right here on its branch
 │       └── AGENTS.md               that team's rules for that repo, where it has one
 │
-├── spaces/                 one directory per task, worktrees inside
-│   └── add-label/
-│       └── <service>/          -> repos/<service>  on <prefix>/add-label
+├── spaces/                 worktrees for tasks started with --space
+│   └── <task>/
+│       └── <repo>/             -> repos/<repo>  on <prefix>/<task>
 │
 ├── docs/                   one directory per task - everything written about it
 │   └── 2026-08-28_add-label/
 │       ├── prd.md              requirements, confirmed at Gate 1
 │       ├── plan.md             milestone 1 (plan-m2.md, plan-m3.md follow)
-│       ├── api-contract.md     what consumers see change - read by frontend/mobile
+│       ├── api-contract.md     what consumers see change - read by the consumer teams
 │       ├── testing.md          RED/GREEN evidence, one section per repo
-│       ├── log.md              wrap-up, written just before teardown
+│       ├── log.md              wrap-up, written just before the task finishes
 │       └── <anything>          supporting files - .sql, .csv, examples, notes
 │
 ├── release/                deployment runbooks, one per release
 │
 ├── .claude/
-│   ├── commands/           /plan-prd, /plan, /space, /pr, /ccs, /learn, /graph
+│   ├── commands/           /plan-prd, /plan, /task, /pr, /ccs, /learn, /graph
 │   ├── skills/             tdd-workflow, logging, ccs-conventions, the pattern skills
 │   ├── learned/            per-repo facts a skill learned - gitignored, see /learn
+│   ├── state/              which tasks are open on this machine - gitignored
 │   ├── agents/             the reviewers
 │   ├── ccs-notes.md        friction found while running tasks
 │   └── scripts/
-│       ├── space.sh        creates and tears down spaces
+│       ├── task.sh         starts, locates, reports on and finishes tasks
+│       ├── tasklib.sh      where a task's work lives - the one place that knows
 │       ├── ccs.sh          checks the workspace system itself
 │       ├── learn.sh        which learned facts exist, and whether they are stale
 │       ├── graph.sh        code-review-graph graphs, kept outside the repos they describe
-│       └── guard.sh        PreToolUse hook - keeps repos/ read-only
+│       └── guard.sh        PreToolUse hook - keeps checkouts sealed unless a task holds them
 ```
 
-Nothing in `repos/` is ever worked in directly — treat those checkouts as
-read-only origins. All editing happens in `spaces/<task>/<repo>/`, except for
-the repos listed in `REFERENCE_REPOS`, which are read-only there too.
+`repos/<repo>` is sealed unless a task holds it: an in-place task holds a
+checkout while it is on the task branch, and nothing else may write there.
+Repos listed in `REFERENCE_REPOS` are read-only everywhere.
 
 A repo that carries an `AGENTS.md` carries its team's rules for that codebase,
 and those rules outrank this workspace's skills and conventions wherever the two
 disagree — see `CLAUDE.md`. What they do not move is where work happens: the
-space, the two gates, the task's documents, and `/pr` are the same for every
-repo.
+task's working directories, the two gates, the task's documents, and `/pr` are
+the same for every repo.
 
 ## Repos
 
 The roster is whatever is on disk. Any git checkout directly under `repos/` is
 a repo, and **its directory name is its alias**. That is the whole rule, and it
-is why no list of services appears in this file — a list here would be one more
+is why no list of repos appears in this file — a list here would be one more
 thing to update, and the first thing to go stale.
 
 ```
-/space repos
+/task repos
 ```
 
-prints the current roster: each checkout, its remote, and any open space using
-it. Add a service by cloning it into `repos/`. Nothing else needs changing and
-no doc needs editing.
+prints the current roster: each checkout, its remote, and any open task using
+it. Add a repo by cloning it into `repos/`. Nothing else needs changing and no
+doc needs editing.
 
-A longer service name resolves by prefix, so `sport-service` finds `sport` and
-`payment-service` finds `payment`. Wherever a command takes a repo list, it
-takes those aliases, comma-separated.
+A longer service name resolves by prefix, so `api-service` finds `api`.
+Wherever a command takes a repo list, it takes those aliases, comma-separated.
 
-**Omitting the repo list means every workable checkout in `repos/`.** That is a
-growing number, so a bare `/space add <task>` creates a worktree for every
-service you have cloned. Name the repos the task actually needs.
+**Omitting the repo list means every workable checkout in `repos/`.** Name the
+repos the task actually needs.
 
 ### Reference-only repos
 
@@ -96,14 +99,13 @@ List them in `.env`, comma-separated, by their alias:
 REFERENCE_REPOS=mobile,partner
 ```
 
-From then on `/space repos` marks them `reference-only`, `/space add <task>`
-skips them in the default set and refuses if you name one explicitly, and the
-guard hook blocks every write to `repos/<repo>/…` **and**
-`spaces/<task>/<repo>/…`. Reading, grepping and `git log` stay untouched — that
-is what the repo is there for.
+From then on `/task repos` marks them `reference-only`, `/task start` leaves them
+out of the default set and refuses if you name one, and the guard hook blocks
+every write to them in `repos/` **and** in any space. Reading, grepping and
+`git log` stay untouched — that is what the repo is there for.
 
 The list is per machine, like the branch prefix, so no tracked file names it.
-`/space config` prints what yours resolved to.
+`/task config` prints what yours resolved to.
 
 ## The task flow
 
@@ -113,12 +115,12 @@ One command runs a task end to end, stopping twice to ask you:
 /plan-prd add promo codes from branch origin/feature/m5.1
       |
       |   writes docs/YYYY-MM-DD_add-promo-codes/prd.md
-      |   the PRD proposes the space: repos, source branch, new branch, PR base
-      |   nothing is created yet
+      |   the PRD proposes the task: repos, isolation, source branch, new branch, PR base
+      |   nothing is started yet
       |
- [GATE 1]  you read the PRD and confirm - or correct the repos / source branch
+ [GATE 1]  you read the PRD and confirm - or correct the repos / isolation / source branch
       |
-      |   space.sh add            -> spaces/add-promo-codes/<repo>/
+      |   task.sh start           -> each repo's working directory, on <prefix>/add-promo-codes
       |   /plan                   -> docs/<date>_add-promo-codes/plan.md
       |   tdd-workflow            -> implementation, RED/GREEN, evidence report
       |   go- / typescript-reviewer -> CRITICAL and HIGH findings fixed
@@ -131,53 +133,73 @@ One command runs a task end to end, stopping twice to ask you:
 Those two stops are the whole point: you read the requirements before a branch
 exists, and you see the finished work before anything is pushed.
 
-`/plan`, `/space`, and `/pr` all still work standalone if you want a single step.
+`/plan`, `/task`, and `/pr` all still work standalone if you want a single step.
+
+## In place or in a space
+
+| | In place (default) | Space (`--space`) |
+|---|---|---|
+| Working directory | `repos/<repo>`, switched to the task branch | `spaces/<task>/<repo>`, a git worktree |
+| Parallel tasks on one repo | no — one in-place task holds a repo at a time | yes |
+| Env files | already there | copied from `repos/<repo>` |
+| Finish | the checkout goes back to the branch it was on | the worktree is removed |
+
+Both kinds can be open at once. `/task start` refuses an in-place task on a repo
+that is dirty or held by another task, and says to use `--space` — it never
+changes a task's layout on its own. `TASK_DEFAULT_ISOLATION` in `.env` sets which
+one a task gets when neither flag is given.
+
+Nothing needs to know which one a task uses: every command asks
+`task.sh where <task> <repo>` for the directory.
 
 ## Everyday use
 
-Everything space-related goes through one command:
-`/space add | remove | list | repos | config`.
+Everything task-related goes through one command:
+`/task start | finish | list | where | repos | config`.
 
-Start a task across every service:
-
-```
-/space add feature-booking
-```
-
-Start one across just two, based off a release branch:
+Start a task in place, in two repos, off a release branch:
 
 ```
-/space add hotfix-payment backend,sport --from origin/release-2
+/task start hotfix-payment api,worker --from origin/release-2
+```
+
+Start one in its own worktrees:
+
+```
+/task start rework-booking api --from origin/develop --space
 ```
 
 See what's open, and whether anything is dirty:
 
 ```
-/space list
+/task list
 ```
 
-See which services are checked out at all:
+Find where a task's work is:
 
 ```
-/space repos
+/task where hotfix-payment api
 ```
 
-See what your branch prefix and default base resolve to:
+See which repos are checked out at all, and what your settings resolve to:
 
 ```
-/space config
+/task repos
+/task config
 ```
 
-Finish up. This writes `docs/<date>_<task>/log.md` **before** removing anything,
-so the summary is captured while the diffs still exist:
+Finish up. This writes `docs/<date>_<task>/log.md` **before** anything moves, so
+the summary is captured while the diffs are still there:
 
 ```
-/space remove feature-booking
+/task finish hotfix-payment
 ```
 
-`remove` refuses to tear down a space that has uncommitted changes or commits
-that have not reached any remote. Push or stash first, or pass `--force` to
-discard on purpose.
+`finish` refuses while a repo has uncommitted changes, and with
+`--delete-branch` also while it has commits that reached no remote. Push or stash
+first, or pass `--force` to discard on purpose. An in-place task can be finished
+as soon as its PRs are open — the pushed branch stays on the remote, and
+`/task start <task> <repo>` picks it up again for review fixes.
 
 ### Code graphs
 
@@ -195,13 +217,13 @@ data into the repo it reads. `graph.sh` keeps every graph under a gitignored
 
 ```
 /graph                                   what is built, and whether it is fresh
-/graph build backend                     graph repos/backend
-/graph review feature-booking            what each repo's change touches, against its base
-/graph run feature-booking/backend query callers_of createBooking
+/graph build api                         graph that repo's own checkout
+/graph review hotfix-payment             what each repo's change touches, against its base
+/graph run hotfix-payment/api query callers_of applyPromo
 ```
 
 `/plan-prd` runs `review` before dispatching the reviewers, so it needs no
-typing during a task. `/space remove` drops a space's graphs along with it.
+typing during a task. `/task finish` drops a task's graphs along with it.
 Builds leave out generated code, migrations and vendored packages, listed in
 the tracked `.code-review-graphignore`.
 
@@ -216,83 +238,95 @@ six tools that read. Nothing is registered until something is built:
 
 Do **not** run `code-review-graph install`. It writes 15 files into the repo it
 targets — MCP configs, instruction files, an append to that repo's `CLAUDE.md`
-— and a hook that rebuilds the graph inside the checkout. `repos/` is read-only,
-and in a space those files would land in the pull request.
+— and a hook that rebuilds the graph inside the checkout. Those files would land
+in a task's pull request.
 
-## `space.sh` reference
+## `task.sh` reference
 
 The slash command is a thin wrapper; the script runs standalone too.
 
 ```
-.claude/scripts/space.sh add <task> [repos] [flags]     create a space
-.claude/scripts/space.sh list [task]                    list spaces, show dirty state
-.claude/scripts/space.sh repos                          the roster, read from disk
-.claude/scripts/space.sh config                         resolved settings and their source
-.claude/scripts/space.sh report <task>                  read-only facts for a wrap-up
-.claude/scripts/space.sh remove <task> [repos] [flags]  tear down
+.claude/scripts/task.sh start <task> [repos] [flags]     start a task, or add repos to one
+.claude/scripts/task.sh where <task> [repo]              the working directory, or one per repo
+.claude/scripts/task.sh root                             the workspace root, absolute
+.claude/scripts/task.sh list [task]                      open tasks, dirty state per repo
+.claude/scripts/task.sh repos                            the roster, read from disk
+.claude/scripts/task.sh config                           resolved settings and their source
+.claude/scripts/task.sh report <task>                    read-only facts for a wrap-up
+.claude/scripts/task.sh finish <task> [repos] [flags]    release the working directories
 ```
 
-Add flags:
+Start flags:
 
-| Flag              | Effect                                                        |
-| ----------------- | ------------------------------------------------------------- |
-| `--from <ref>`    | Base ref for new branches. Default `origin/main`.              |
-| `--from a=x,b=y`  | Per-repo base refs, e.g. `backend=origin/release-2`.           |
-| `--branch <name>` | Override the branch name (default `<prefix>/<task>`).          |
-| `--no-fetch`      | Skip `git fetch`; use whatever refs are already local.         |
-| `--no-env`        | Don't copy `.env*` files into the new worktrees.               |
-| `--dry-run`       | Print what would happen, write nothing.                        |
+| Flag                 | Effect                                                        |
+| -------------------- | ------------------------------------------------------------- |
+| `--from <ref>`       | Base ref for new branches. Default `TASK_DEFAULT_BASE`.        |
+| `--from a=x,b=y`     | Per-repo base refs, e.g. `api=origin/release-2`.               |
+| `--space`            | Work in worktrees under `spaces/<task>/`.                      |
+| `--inplace`          | Work in `repos/<repo>` itself (the default).                   |
+| `--branch <name>`    | Override the branch name (default `<prefix>/<task>`).          |
+| `--no-fetch`         | Skip `git fetch`; use whatever refs are already local.         |
+| `--no-env`           | Don't copy `.env*` files into new worktrees.                   |
+| `--dry-run`          | Print what would happen, write nothing.                        |
 
-Remove flags: `--delete-branch` (also drop the local branch), `--force`
+Finish flags: `--delete-branch` (also drop the local branch), `--force`
 (discard uncommitted work / unpushed commits).
 
-`report` is what makes the log possible — it prints the branch, the recorded
-base, commit subjects, a diffstat, and changed file paths per repo, without
-touching anything.
+`report` is what makes the log possible — it prints the isolation, each repo's
+working directory, branch, recorded base, commit subjects, a diffstat, and
+changed file paths, without touching anything.
 
 ## How it behaves
 
 - **Branch naming** — `<prefix>/<task>` by default, the same branch in every repo
-  of the space, so a task is one name everywhere. `<prefix>` is per machine, so
+  of the task, so a task is one name everywhere. `<prefix>` is per machine, so
   two people working the same task get branches that differ only by prefix.
 - **Branch reuse** — if `<prefix>/<task>` already exists locally or on `origin`, the
-  worktree joins it instead of failing. Adding a repo to an existing space, or
-  re-running the same command, is safe.
-- **Env files** — `.env`, `.env.local`, `.env.development`, `.env.*.local` are
-  copied from `repos/<repo>` into each new worktree. Worktrees only carry
-  tracked files, so without this the services won't boot.
+  repo joins it instead of failing. Adding a repo to an open task, or re-running
+  the same command, is safe.
+- **One isolation per task** — every repo in a task works the same way; adding a
+  repo to an open task keeps its isolation.
+- **Env files** — for a space, `.env`, `.env.local`, `.env.development` and
+  `.env.*.local` are copied from `repos/<repo>` into each new worktree, since
+  worktrees only carry tracked files. In place, the checkout already has them.
 - **Base tracking** — the base ref and commit are recorded in
-  `spaces/<task>/.space`, so `report` can still state the true starting point
-  long after the branch has moved on.
-- **Partial failures** — if a base ref doesn't exist for one repo, that repo is
-  skipped and reported; the rest of the space is still created.
-- **All-or-nothing teardown** — `remove` checks every repo before removing any,
-  so a blocked teardown leaves the space intact rather than half dismantled.
+  `.claude/state/tasks/<task>`, so `report` can still state the true starting
+  point long after the branch has moved on. An in-place task also records the
+  branch each checkout was on, which is where `finish` puts it back.
+- **Partial failures** — if a base ref doesn't exist for one repo, or a repo is
+  busy, that repo is skipped and reported; the rest of the task still starts.
+- **All-or-nothing finish** — `finish` checks every repo before touching any,
+  so a blocked finish leaves the task intact rather than half released.
+- **Reads come from refs** — scripts that describe a repo (release notes, learned
+  facts, graphs) read its default branch or the task's base, never a working tree
+  a task may have moved.
 
 ## Settings
 
-Branch prefix and default base ref are **per machine**, not per workspace. They
-live in a gitignored `.env` at the root, so everyone differs without touching a
-tracked file:
+Branch prefix, default base ref and default isolation are **per machine**, not
+per workspace. They live in a gitignored `.env` at the root, so everyone differs
+without touching a tracked file:
 
 ```
 cp .env.example .env
 ```
 
 ```
-SPACE_BRANCH_PREFIX=<your-handle>   # branches become <your-handle>/<task>
-SPACE_DEFAULT_BASE=origin/main      # base ref when --from is not given
+TASK_BRANCH_PREFIX=<your-handle>   # branches become <your-handle>/<task>
+TASK_DEFAULT_BASE=origin/main      # base ref when --from is not given
+TASK_DEFAULT_ISOLATION=inplace     # or space
 ```
 
 Highest wins: the environment, then `.env`, then a built-in default. So a
 one-off override works without editing anything:
 
 ```
-SPACE_BRANCH_PREFIX=spike .claude/scripts/space.sh add try-it backend
+TASK_BRANCH_PREFIX=spike .claude/scripts/task.sh start try-it api
 ```
 
-`/space config` prints what each setting resolved to and which layer it came
-from. `.env.example` is the tracked template and lists every setting.
+The `TASK_*` settings were called `SPACE_*` before; the old names are still read,
+and `/task config` says when one is. `.env.example` is the tracked template and
+lists every setting.
 
 Because the prefix differs per person, **no doc in this repo names one** —
 they all write `<prefix>/<task>`. Do not paste a real prefix into a PRD, a
@@ -315,24 +349,27 @@ tracked, so a fresh clone gets working search with no setup.
 
 The workspace changes; the prose describing it does not. `/ccs` checks the two
 against each other — undocumented checkouts, dangling skill references, commands
-missing frontmatter, branch prefixes that have drifted — and proposes one fix at
-a time. `/ccs note <what got in the way>` records friction mid-task, while it is
-still true, into `.claude/ccs-notes.md`.
+missing frontmatter, branch prefixes that have drifted, skills carrying one
+repo's facts — and proposes one fix at a time. `/ccs note <what got in the way>`
+records friction mid-task, while it is still true, into `.claude/ccs-notes.md`.
 
 Changes to the system land in this repo directly. It is not a service, so it has
-no space and no `/pr`; `ccs-conventions` describes how its pieces are shaped.
+no task and no `/pr`; `ccs-conventions` describes how its pieces are shaped.
 
 ## Rules
 
-- Never write anything under `repos/` — see `CLAUDE.md`. A `PreToolUse` hook
-  (`.claude/scripts/guard.sh`) enforces it, so this is not a matter of judgment.
+- `repos/<repo>` is sealed unless an in-place task holds it — see `CLAUDE.md`. A
+  `PreToolUse` hook (`.claude/scripts/guard.sh`) enforces it, so this is not a
+  matter of judgment.
 - Read a repo's `AGENTS.md` before planning or writing in it, and follow it over
-  any skill here. It belongs to that repo's team: change it in that repo's space,
-  through `/pr`, and never restate it under `.claude/`.
-- A repo listed in `REFERENCE_REPOS` is read-only in a space too, not just in
-  `repos/`. The same hook enforces that.
-- `git add`, `git commit`, and `git push` are fine **inside a space**. Committing
-  happens once, at the end, through `/pr` — not as checkpoints during a build.
-- Tear a space down with `/space remove`, not `rm -rf`. A raw delete leaves
-  git's worktree registry pointing at a directory that's gone, and skips the
-  log entirely.
+  any skill here. It belongs to that repo's team: change it in a task, through
+  `/pr`, and never restate it under `.claude/`.
+- A repo listed in `REFERENCE_REPOS` is read-only everywhere, in `repos/` and in
+  any space. The same hook enforces that.
+- `git add`, `git commit`, and `git push` of the task branch are fine in a task's
+  working directories. Committing happens once, at the end, through `/pr` — not
+  as checkpoints during a build — and work reaches the base branch only through
+  the PR.
+- Finish a task with `/task finish`, not `rm -rf` or a hand-made `git switch`. A
+  raw delete leaves git's worktree registry pointing at a directory that's gone,
+  a hand switch leaves the task's metadata behind, and both skip the log.
