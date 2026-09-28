@@ -351,7 +351,8 @@ is bumped on every later edit to the plan.
 
 Carry the PRD's deferred **Open Questions** forward: any that block a task must be settled
 before that task is written — ask the user in the terminal rather than planning around an
-unknown.
+unknown. If the task's directory holds a `capability.md` (written with the
+`product-capability` skill), its constraints bind the plan the same way.
 
 ````markdown
 # Plan: {Feature Name}
@@ -389,6 +390,7 @@ unknown.
 - **Working directory**: `{repo}` -> `{path from task.sh where}`
 - **Action**: {what to do}
 - **Mirror**: {pattern to follow}
+- **Covers**: {AC-001, AC-003 — the PRD's acceptance criteria this task makes true, or "none"}
 - **Validate**: {command that proves correctness, run from the working directory}
 
 ## Validation
@@ -403,6 +405,7 @@ cd "$(.claude/scripts/task.sh where <task> <repo>)" && {project-specific validat
 
 ## Acceptance
 - [ ] All tasks complete
+- [ ] Every Required acceptance criterion in this milestone is covered by a task
 - [ ] Validation passes in every repo the plan touches
 - [ ] Patterns mirrored, not reinvented
 - [ ] No file outside the task's working directories was written

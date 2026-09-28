@@ -45,7 +45,7 @@ experiment, with no stashing and no `git checkout` whiplash between them.
 │   ├── skills/             tdd-workflow, logging, ccs-conventions, the pattern skills
 │   ├── learned/            per-repo facts a skill learned - gitignored, see /learn
 │   ├── state/              which tasks are open on this machine - gitignored
-│   ├── agents/             the reviewers
+│   ├── agents/             the reviewers, tdd-guide, build resolvers run by hand
 │   ├── ccs-notes.md        friction found while running tasks
 │   └── scripts/
 │       ├── task.sh         starts, locates, reports on and finishes tasks
@@ -123,7 +123,7 @@ One command runs a task end to end, stopping twice to ask you:
       |   task.sh start           -> each repo's working directory, on <prefix>/add-promo-codes
       |   /plan                   -> docs/<date>_add-promo-codes/plan.md
       |   tdd-workflow            -> implementation, RED/GREEN, evidence report
-      |   go- / typescript-reviewer -> CRITICAL and HIGH findings fixed
+      |   reviewers by language   -> CRITICAL and HIGH findings fixed
       |
  [GATE 2]  it reports what changed and stops, uncommitted
       |
