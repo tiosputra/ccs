@@ -82,10 +82,10 @@ the base and commit it actually used, so check it matches what you intended.
 The first line of the result says which `mode` ran. Follow the matching
 section below and ignore the others.
 
-Per this project's CLAUDE.md: `repos/` is sealed except where an in-place task
-owns a checkout, and a space's worktrees are writable. The guard hook enforces
-both. Committing is `/pr`'s job at the end of a task, not something to do while
-it is being worked. A repo in `REFERENCE_REPOS` is sealed everywhere.
+Per this project's CLAUDE.md: checkouts in `repos/` are writable like a space's
+worktrees, and a source branch is never deleted - the guard hook enforces that.
+Committing is `/pr`'s job at the end of a task, not something to do while it is
+being worked. A repo in `REFERENCE_REPOS` is read-only everywhere.
 
 ### mode: start - the task has already started
 

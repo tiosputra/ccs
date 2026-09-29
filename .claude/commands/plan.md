@@ -522,7 +522,7 @@ Assistant:
 
 **CRITICAL**: This command will **NOT** write any code until you explicitly confirm the plan with "yes" or "proceed" or similar affirmative response.
 
-**CRITICAL**: This command never plans a write outside the task's working directories. Every path comes from `task.sh where`; a checkout the task does not hold is sealed, and the guard refuses it.
+**CRITICAL**: This command never plans a write outside the task's working directories. Every path comes from `task.sh where`; a checkout outside the task is another task's work, even though the guard would let you write there.
 
 If you want changes, respond with:
 - "modify: [your changes]"

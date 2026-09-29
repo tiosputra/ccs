@@ -3,58 +3,64 @@
 # guard.sh - PreToolUse hook. Enforces the workspace rules that CLAUDE.md can
 # only ask for:
 #
-#   1. repos/<repo> is sealed unless a task owns it. A checkout is owned by an
-#      in-place task while its HEAD is that task's branch AND the task's
-#      metadata (.claude/state/tasks/<task>, see tasklib.sh) lists the repo -
-#      both, or it stays sealed. The checkout's own root and its .git are
-#      sealed even then.
+#   1. Checkouts are writable. repos/<repo> is treated like a space's
+#      worktrees (spaces/<task>/<repo>): files and git alike, whether or not a
+#      task holds it.
 #
-#   2. In an owned checkout, git may add, commit, and push the task branch -
-#      and nothing else that moves history. checkout, switch, reset, rebase,
-#      merge, pull and the like are refused (only task.sh moves branches), and
-#      a push to any other ref is refused: work reaches the base branch through
-#      a pull request, never directly.
+#   2. A source branch is never deleted. In any checkout, in repos/ or in a
+#      space, a git call that deletes or renames a source branch - the local
+#      branch, its remote-tracking ref, or the branch on the remote - is
+#      refused, and so is a push with --mirror or --prune, which can delete one
+#      without naming it. A repo's source branches, each without its remote
+#      prefix, are:
+#        - every base a task records for it  (base<TAB><repo><TAB><ref>)
+#        - every branch a task will return its checkout to  (home<TAB>...)
+#        - TASK_DEFAULT_BASE
+#        - the remote's default branch  (refs/remotes/origin/HEAD)
+#      Task metadata is .claude/state/tasks/<task> (see tasklib.sh). If any of
+#      it cannot be read, the source branches are unknown and every branch of
+#      the repo is protected until it can be.
+#      For the same reason repos/ itself, a checkout's root in repos/ and
+#      everything inside its .git are never written or removed directly: they
+#      hold every branch. Git writes its own files there as usual.
 #
 #   3. Reference repos are read-only *everywhere*. REFERENCE_REPOS in .env is
 #      a comma list of repo aliases kept for reading, questions and analysis
 #      only - REFERENCE_REPOS=mobile,partner seals repos/mobile and
-#      repos/partner, whatever a task claims, and also spaces/<task>/mobile and
-#      spaces/<task>/partner.
-#
-# A space's worktrees (spaces/<task>/<repo>) are writable, git included.
-#
-# `repos/README.md` is the one exception under repos/: it is tracked in this
-# repo (the gitignore un-ignores it) and describes the roster rather than
-# living inside any checkout, so it is writable.
+#      repos/partner, and also spaces/<task>/mobile and spaces/<task>/partner.
 #
 # Reads the hook payload as JSON on stdin. Exit 0 allows the call; exit 2
 # blocks it and shows stderr to the agent so it can correct course.
 #
 # Anything unexpected in the payload (bad JSON, missing fields, no python3)
 # exits 0. A guard that bricks the session on a malformed payload is worse
-# than no guard. Ownership is the opposite: any doubt about who holds a
-# checkout - unreadable HEAD, unreadable metadata - leaves it sealed.
+# than no guard. Source branches are the opposite: any doubt about which they
+# are protects them all.
 #
 # Test it by hand:
-#   echo '{"tool_name":"Write","tool_input":{"file_path":"repos/api/x.ts"}}' \
+#   echo '{"tool_name":"Bash","tool_input":{"command":"git -C repos/api branch -D main"}}' \
 #     | .claude/scripts/guard.sh; echo "exit=$?"
 #
-# The matching aims to be precise in both directions: a read dressed up as a
-# write is a session-wide tax, and every relaxation below is a case where the
-# command provably cannot write into a sealed checkout. See `ccs-conventions`
-# for the residual cases, and guard-test.sh for the pinned behaviour.
+# The matching aims to be precise in both directions: a read or an ordinary
+# write refused is a session-wide tax, and every relaxation below is a case
+# where the command provably cannot delete a source branch or write into a
+# reference repo. See `ccs-conventions` for the residual cases, and
+# guard-test.sh for the pinned behaviour.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 command -v python3 >/dev/null 2>&1 || exit 0
 
-# Same precedence as every other setting: environment, then .env, then empty.
+# Same precedence as every other setting: environment, then .env, then built-in.
 . "$SCRIPT_DIR/config.sh" 2>/dev/null
 cfg_resolve REFERENCE_REPOS "" 2>/dev/null || REFERENCE_REPOS=""
+cfg_resolve_renamed TASK_DEFAULT_BASE SPACE_DEFAULT_BASE origin/main 2>/dev/null \
+  || TASK_DEFAULT_BASE=origin/main
 
-ROOT="$ROOT" REFERENCE_REPOS="${REFERENCE_REPOS:-}" exec python3 -c '
-import json, os, re, sys
+ROOT="$ROOT" REFERENCE_REPOS="${REFERENCE_REPOS:-}" \
+  TASK_DEFAULT_BASE="${TASK_DEFAULT_BASE:-origin/main}" exec python3 -c '
+import fnmatch, json, os, re, sys
 
 def allow():  sys.exit(0)
 def block(msg):
@@ -73,6 +79,7 @@ REPOS  = os.path.join(ROOT, "repos")
 SPACES = os.path.join(ROOT, "spaces")
 STATE  = os.path.join(ROOT, ".claude", "state", "tasks")
 ROSTER = os.path.join(REPOS, "README.md")
+DEFAULT_BASE = os.environ.get("TASK_DEFAULT_BASE", "")
 tool   = payload.get("tool_name", "")
 inp    = payload.get("tool_input") or {}
 cwd    = payload.get("cwd") or os.getcwd()
@@ -82,61 +89,104 @@ cwd    = payload.get("cwd") or os.getcwd()
 REFS = [r.strip() for r in os.environ.get("REFERENCE_REPOS", "").split(",")
         if r.strip()]
 
-# ---- ownership ------------------------------------------------------------
+GLOB = re.compile(r"[*?\[]")
 
-def read_head(repo_dir):
-    """The branch repo_dir has checked out, or None: detached, unreadable, or
-    not a checkout. .git may be a directory or a gitdir: pointer file."""
+# ---- a checkout and its branches -----------------------------------------
+
+def git_dir(checkout):
+    """The git directory of a checkout, or None. .git may be a directory or a
+    gitdir: pointer file."""
     try:
-        g = os.path.join(repo_dir, ".git")
+        g = os.path.join(checkout, ".git")
         if os.path.isfile(g):
             line = open(g).read().strip()
             if not line.startswith("gitdir:"):
                 return None
             gd = line[len("gitdir:"):].strip()
             if not os.path.isabs(gd):
-                gd = os.path.join(repo_dir, gd)
-        else:
-            gd = g
-        head = open(os.path.join(gd, "HEAD")).read().strip()
+                gd = os.path.join(checkout, gd)
+            return os.path.realpath(gd)
+        return g if os.path.isdir(g) else None
+    except Exception:
+        return None
+
+def read_head(checkout):
+    """The branch a checkout has checked out, or None: detached, unreadable,
+    or not a checkout."""
+    try:
+        head = open(os.path.join(git_dir(checkout), "HEAD")).read().strip()
         if head.startswith("ref: refs/heads/"):
             return head[len("ref: refs/heads/"):]
     except Exception:
         pass
     return None
 
-_owner = {}
-def owner(repo):
-    """(task, branch) of the in-place task holding repos/<repo>, or None.
-
-    Held means the checkout HEAD is the task branch and the task metadata
-    lists the repo. Either alone is not enough: a branch switched by hand is
-    not a task, and metadata whose checkout moved on is not holding anything.
-    Any error reads as not held, which keeps the checkout sealed."""
-    if repo in _owner:
-        return _owner[repo]
-    found = None
+def remotes(repo):
+    names = {"origin"}
+    gd = git_dir(os.path.join(REPOS, repo))
     try:
-        branch = read_head(os.path.join(REPOS, repo))
-        if branch and os.path.isdir(STATE):
-            for name in sorted(os.listdir(STATE)):
-                fields, repos_in = {}, set()
-                with open(os.path.join(STATE, name)) as fh:
-                    for line in fh:
-                        f = line.rstrip("\n").split("\t")
-                        if f[0] == "base" and len(f) > 1:
-                            repos_in.add(f[1])
-                        elif len(f) > 1:
-                            fields.setdefault(f[0], f[1])
-                if (fields.get("isolation") == "inplace"
-                        and fields.get("branch") == branch
-                        and repo in repos_in):
-                    found = (name, branch)
-                    break
+        names |= set(os.listdir(os.path.join(gd, "refs", "remotes")))
+    except Exception:
+        pass
+    return names
+
+def branch_name(ref, rems):
+    """A ref as the branch it names: refs/heads/, refs/remotes/ and a leading
+    remote dropped - origin/main, refs/heads/main and main are all main."""
+    ref = ref.strip().lstrip("+")
+    if ref.startswith("refs/heads/"):
+        return ref[len("refs/heads/"):]
+    if ref.startswith("refs/remotes/"):
+        return ref[len("refs/remotes/"):].partition("/")[2]
+    first, _, rest = ref.partition("/")
+    return rest if rest and first in rems else ref
+
+def metadata_files():
+    """Every task metadata file, current and legacy (spaces/<task>/.space)."""
+    files = []
+    if os.path.isdir(STATE):
+        files += [os.path.join(STATE, n) for n in sorted(os.listdir(STATE))]
+    if os.path.isdir(SPACES):
+        for n in sorted(os.listdir(SPACES)):
+            legacy = os.path.join(SPACES, n, ".space")
+            if os.path.isfile(legacy):
+                files.append(legacy)
+    return files
+
+_sources = {}
+def source_branches(repo):
+    """The source branches of repo, or None when they cannot be known - which
+    protects every branch."""
+    if repo in _sources:
+        return _sources[repo]
+    rems = remotes(repo)
+    names = set()
+    try:
+        if DEFAULT_BASE:
+            names.add(branch_name(DEFAULT_BASE, rems))
+        gd = git_dir(os.path.join(REPOS, repo))
+        if gd:
+            try:
+                h = open(os.path.join(gd, "refs", "remotes", "origin", "HEAD")).read().strip()
+                if h.startswith("ref: "):
+                    names.add(branch_name(h[len("ref: "):], rems))
+            except OSError:
+                pass
+        for path in metadata_files():
+            if os.path.isdir(path):
+                continue
+            with open(path) as fh:
+                for line in fh:
+                    f = line.rstrip("\n").split("\t")
+                    if f[0] in ("base", "home") and len(f) > 2 and f[1] == repo:
+                        names.add(branch_name(f[2], rems))
+        found = names
     except Exception:
         found = None
-    _owner[repo] = found
+    _sources[repo] = found
     return found
+
+# ---- where a path is ------------------------------------------------------
 
 def resolve(path, base):
     p = path if os.path.isabs(path) else os.path.join(base, path)
@@ -144,51 +194,66 @@ def resolve(path, base):
 
 def checkout_of(p):
     """What a resolved path is inside, as (kind, detail):
-    ("repos", None)        sealed - repos/ itself, or a checkout no task holds
-    ("reference", None)    sealed - a REFERENCE_REPOS checkout, anywhere
-    ("owned", (task, br))  repos/<repo> held by an in-place task
-    (None, None)           anywhere else, a space worktree included"""
-    if p == REPOS or p.startswith(REPOS + os.sep):
-        rel = p[len(REPOS) + 1:] if p != REPOS else ""
-        repo = rel.split(os.sep)[0] if rel else ""
-        if not repo:
-            return ("repos", None)
+    ("reference", None)            a REFERENCE_REPOS checkout, anywhere
+    ("checkout", (repo, dir))      any other repos/<repo> or spaces/<task>/<repo>
+    ("repos", None)                repos/ itself
+    (None, None)                   anywhere else"""
+    if p == REPOS:
+        return ("repos", None)
+    if p.startswith(REPOS + os.sep):
+        repo = p[len(REPOS) + 1:].split(os.sep)[0]
         if repo in REFS:
             return ("reference", None)
-        o = owner(repo)
-        return ("owned", o) if o else ("repos", None)
-    if REFS and p.startswith(SPACES + os.sep):
+        return ("checkout", (repo, os.path.join(REPOS, repo)))
+    if p.startswith(SPACES + os.sep):
         parts = p[len(SPACES) + 1:].split(os.sep)
-        if len(parts) >= 2 and parts[1] in REFS:
-            return ("reference", None)
+        if len(parts) >= 2:
+            if parts[1] in REFS:
+                return ("reference", None)
+            return ("checkout", (parts[1], os.path.join(SPACES, parts[0], parts[1])))
     return (None, None)
+
+def is_checkout_name(pattern):
+    """Whether a repos/ entry - or a glob over them - names a real checkout."""
+    try:
+        names = [n for n in os.listdir(REPOS)
+                 if os.path.exists(os.path.join(REPOS, n, ".git"))]
+    except Exception:
+        return bool(GLOB.search(pattern))
+    if GLOB.search(pattern):
+        return any(fnmatch.fnmatchcase(n, pattern) for n in names)
+    return pattern in names
 
 def seal_reason(path, base):
     """Why writing this path is refused, or None if it is writable.
 
-    Inside an owned checkout, files are writable - but not the checkout
-    root itself, and never anything under its .git."""
+    repos/ itself, a checkout root in repos/, and anything under its .git hold
+    every branch of the repo, so they are never written directly. A glob that a
+    shell would expand to one of them counts: repos/*, repos/<repo>/.*"""
     if not path:
         return None
     p = resolve(path, base)
     if p == os.path.realpath(ROSTER):
         return None
     kind, _ = checkout_of(p)
-    if kind in ("repos", "reference"):
-        return kind
-    if kind == "owned":
+    if kind in ("reference", "repos"):
+        return "reference" if kind == "reference" else "branches"
+    if kind == "checkout" and p.startswith(REPOS + os.sep):
         parts = p[len(REPOS) + 1:].split(os.sep)
-        if len(parts) < 2 or parts[1] == ".git":
-            return "repos"
+        if len(parts) == 1:
+            return "branches" if is_checkout_name(parts[0]) else None
+        top = parts[1]
+        if top == ".git":
+            return "branches"
+        # A shell glob reaches a dotfile only when it starts with a dot.
+        if GLOB.search(top) and top.startswith(".") and fnmatch.fnmatchcase(".git", top):
+            return "branches"
     return None
 
-WRITE_HINT = (
-    "That checkout is sealed: repos/<repo> is writable only while an in-place\n"
-    "task holds it (see CLAUDE.md).\n"
-    "Find where the task works: .claude/scripts/task.sh where <task> <repo>\n"
-    "No task yet? Ask the user for the repos and the source branch, then run:\n"
-    "  .claude/scripts/task.sh start <task> <repos> --from <source-branch>\n"
-    "(add --space to work in a worktree under spaces/ instead)."
+BRANCHES_HINT = (
+    "repos/, a checkout root in repos/ and its .git hold every branch of the repo,\n"
+    "the source branch included, so they are never written or removed directly.\n"
+    "Everything else in a checkout is writable, and git itself writes there as usual."
 )
 
 REF_HINT = (
@@ -200,17 +265,19 @@ REF_HINT = (
     "REFERENCE_REPOS first; that is their call, not yours."
 )
 
-def owned_hint(detail):
-    task, branch = detail
-    return (
-        "repos/ checkout held by task " + task + " on " + branch + ".\n"
-        "In it, git may add, commit, and push " + branch + " - nothing else that\n"
-        "moves history. Branches move only through task.sh, and work reaches the\n"
-        "base branch only through a pull request (/pr), never by a direct push."
-    )
-
 def hint(reason):
-    return REF_HINT if reason == "reference" else WRITE_HINT
+    return REF_HINT if reason == "reference" else BRANCHES_HINT
+
+def source_hint(names):
+    if names is None:
+        return ("Task metadata under .claude/state/tasks could not be read, so this\n"
+                "repo\x27s source branches are unknown and no branch may be deleted or\n"
+                "renamed until it can be.")
+    return ("A source branch is never deleted - not locally, not on a remote, not by\n"
+            "renaming it. This repo\x27s source branches: " + ", ".join(sorted(names)) + "\n"
+            "(task bases, the branches tasks return their checkouts to,\n"
+            "TASK_DEFAULT_BASE, and the remote\x27s default branch).\n"
+            "Any other branch may be deleted or renamed.")
 
 # ---- file-writing tools -------------------------------------------------
 if tool in ("Write", "Edit", "NotebookEdit", "MultiEdit"):
@@ -239,20 +306,24 @@ CMDPOS = r"(?:^|[\n;&|(]|&&|\|\|)\s*"
 
 # ---- where plain commands run -------------------------------------------
 # A command that cds first runs there; otherwise it runs in the session cwd.
-# Plain git calls, redirects and in-place edits are judged against that
-# directory, so `git commit` from inside a sealed checkout is refused whether
+# Plain git calls, redirects and file commands are judged against that
+# directory, so `git branch -D main` from inside a checkout is judged whether
 # the cd is in this command or happened earlier in the session.
 CD = re.search(CMDPOS + r"cd\s+(?:\"|\x27)?([^\s\"\x27;&|]+)", cmd)
 EFF = resolve(CD.group(1).strip("\"\x27"), cwd) if CD else os.path.realpath(cwd)
 EFF_KIND, EFF_DETAIL = checkout_of(EFF)
+IN_REPOS = EFF == REPOS or EFF.startswith(REPOS + os.sep)
 
 # ---- git subcommands ----------------------------------------------------
-# Verbs that move a checkout no matter how they are invoked.
+# In a reference repo nothing that changes the checkout runs. These are the
+# verbs that change one no matter how they are invoked...
 ALWAYS_MUTATING = ("add|commit|checkout|switch|merge|rebase|reset|revert|restore|"
-                   "cherry-pick|apply|am|push|pull|fetch|clean|rm|mv|gc|prune")
+                   "cherry-pick|apply|am|push|pull|fetch|clean|rm|mv|gc|prune|"
+                   "update-ref")
 
-# Verbs with both a read-only and a mutating form. `git branch --list` and
-# `git worktree list` only report; `git branch -d` and `git worktree add` do not.
+# ...and the verbs with both a read-only and a mutating form. `git branch
+# --list` and `git worktree list` only report; `git branch -d` and
+# `git worktree add` do not.
 DUAL = "branch|tag|worktree|stash"
 
 READ_ONLY_FIRST = re.compile(
@@ -279,48 +350,63 @@ def git_call_mutates(sub, rest):
         return True
     return not READ_ONLY_FIRST.match(rest)
 
-# In a checkout an in-place task holds, only these may change it. Anything
-# else in ALWAYS_MUTATING/DUAL moves history or the branch and is refused.
-OWNED_OK = ("add", "commit", "rm", "mv", "restore", "apply", "fetch", "stash", "push")
+SHORT = re.compile(r"^-[A-Za-z]+$")
 
-def push_violation(rest, branch):
-    """Why this push is refused from an owned checkout, or None. Only the task
-    branch may be pushed: bare `git push` (HEAD is the task branch), HEAD, or
-    refspecs whose destination is the task branch."""
-    toks = rest.split()
-    for t in toks:
-        if t in ("--all", "--mirror", "--tags", "--delete", "-d", "--prune"):
-            return "git push " + t + " reaches beyond the task branch"
-    args = [t for t in toks if not t.startswith("-")]
-    for spec in args[1:]:
-        spec = spec.lstrip("+")
-        src, dst = spec.split(":", 1) if ":" in spec else (spec, spec)
-        if src == "" or dst == "":
-            return "a push of an empty ref (" + spec + ") deletes a remote branch"
-        if dst.startswith("refs/heads/"):
-            dst = dst[len("refs/heads/"):]
-        if dst not in (branch, "HEAD"):
-            return "only " + branch + " may be pushed from this checkout, not " + dst
-    return None
-
-def owned_violation(sub, rest, detail):
-    if not git_call_mutates(sub, rest):
-        return None
+def doomed_refs(sub, rest, checkout):
+    """The refs this git call deletes or renames away, as written."""
+    toks = [t.strip("\"\x27") for t in rest.split()]
+    short = [t[1:] for t in toks if SHORT.match(t)]
+    pos = [t for t in toks if t and not t.startswith("-")]
+    if sub == "branch":
+        if "--delete" in toks or any(set(s) & set("dD") for s in short):
+            return pos
+        if "--move" in toks or any(set(s) & set("mM") for s in short):
+            if len(pos) >= 2:
+                return pos[:1]
+            return [read_head(checkout) or ""]
+        return []
     if sub == "push":
-        return push_violation(rest, detail[1])
-    if sub in OWNED_OK:
-        return None
-    return "git " + sub + " moves history or the branch"
+        deleting = "--delete" in toks or any("d" in s for s in short)
+        specs = pos[1:] if len(pos) > 1 else pos     # the first names the remote
+        out = []
+        for spec in specs:
+            s = spec.lstrip("+")
+            if s.startswith(":"):
+                out.append(s[1:])
+            elif deleting:
+                out.append(s.rpartition(":")[2])
+        return out
+    if sub == "update-ref":
+        if "-d" in toks or any("d" in s for s in short):
+            return pos[:1]
+        return []
+    return []
 
 def judge_git(kind, detail, sub, rest, where):
-    if kind in ("repos", "reference"):
+    if kind == "reference":
         if git_call_mutates(sub, rest):
-            block("BLOCKED: that git command would change a sealed checkout: "
-                  + where + "\n\n" + hint(kind))
-    elif kind == "owned":
-        why = owned_violation(sub, rest, detail)
-        if why:
-            block("BLOCKED: " + why + " (" + where + ").\n\n" + owned_hint(detail))
+            block("BLOCKED: that git command would change a reference-only repo: "
+                  + where + "\n\n" + REF_HINT)
+        return
+    if kind != "checkout":
+        return
+    repo, checkout = detail
+    if sub == "push" and re.search(r"(?:^|\s)--(?:mirror|prune)\b", rest):
+        block("BLOCKED: git push --mirror/--prune can delete branches on the remote,\n"
+              "a source branch among them (" + where + ").\n\n"
+              + source_hint(source_branches(repo)))
+    doomed = doomed_refs(sub, rest, checkout)
+    if not doomed:
+        return
+    names = source_branches(repo)
+    rems = remotes(repo)
+    for ref in doomed:
+        b = branch_name(ref, rems)
+        if not b:
+            continue
+        if names is None or b in names:
+            block("BLOCKED: that git command would delete or rename the source branch "
+                  + b + " (" + where + ").\n\n" + source_hint(names))
 
 GIT_C = re.compile(CMDPOS + r"(?:sudo\s+)?git\s+(?:-\S+\s+)*-C\s+(?:\"|\x27)?"
                    r"(?P<path>[^\s\"\x27]+)"
@@ -355,13 +441,12 @@ def redirect_reason(target):
 for m in REDIRECT.finditer(cmd):
     reason = redirect_reason(m.group(1))
     if reason:
-        block("BLOCKED: that redirect would write into a sealed checkout: "
-              + m.group(1) + "\n\n" + hint(reason))
+        block("BLOCKED: that redirect would write into " + m.group(1)
+              + "\n\n" + hint(reason))
 
 # ---- file commands --------------------------------------------------------
 # Destructive or in-place commands are judged per path they name, by the same
-# seal_reason the file tools use - so they work inside an owned checkout and
-# a space, and are refused against a sealed one.
+# seal_reason the file tools use.
 DESTRUCTIVE = r"rm|rmdir|mv|cp|touch|mkdir|tee|truncate|chmod|chown|ln|dd"
 SEGMENT = re.compile(r"[^\n;&|]+")
 IS_DESTRUCTIVE = re.compile(r"^\s*(?:sudo\s+)?(?:" + DESTRUCTIVE + r")\b")
@@ -370,15 +455,16 @@ RELATIVE_SEALABLE = re.compile(r"^(?:\.{1,2}/)*(?:repos|spaces)(?:/|$)")
 
 def path_args(seg):
     """The arguments of one command that name a path worth judging: absolute
-    paths, and relative ones that start at repos/ or spaces/. A word merely
-    containing "repos" - ws/repos, myrepos - is not one, and an argument with
-    an unexpanded $VAR or backtick cannot be resolved honestly, so it is left
-    alone rather than guessed at."""
+    paths, relative ones that start at repos/ or spaces/, and - for a command
+    running inside repos/ - every relative one, since `rm -rf .git` there names
+    a checkout\x27s branches. A word merely containing "repos" - ws/repos,
+    myrepos - is not one, and an argument with an unexpanded $VAR or backtick
+    cannot be resolved honestly, so it is left alone rather than guessed at."""
     for tok in seg.split()[1:]:
         t = tok.strip("\"\x27")
         if not t or t.startswith("-") or "$" in t or "`" in t:
             continue
-        if t.startswith("/") or RELATIVE_SEALABLE.match(t):
+        if t.startswith("/") or RELATIVE_SEALABLE.match(t) or IN_REPOS:
             yield t
 
 for seg in SEGMENT.findall(cmd):
@@ -387,12 +473,11 @@ for seg in SEGMENT.findall(cmd):
     for arg in path_args(seg):
         reason = seal_reason(arg, EFF)
         if reason:
-            block("BLOCKED: that command would modify a sealed checkout: "
-                  + arg + "\n\n" + hint(reason))
-    # Relative paths from inside a sealed checkout: `cd repos/api && rm -rf src`.
-    if EFF_KIND in ("repos", "reference"):
-        block("BLOCKED: that would change a sealed checkout from inside it ("
-              + os.path.relpath(EFF, ROOT) + ").\n\n" + hint(EFF_KIND))
+            block("BLOCKED: that command would modify " + arg + "\n\n" + hint(reason))
+    # Relative paths from inside a reference repo: `cd repos/partner && rm -rf src`.
+    if EFF_KIND == "reference":
+        block("BLOCKED: that would change a reference-only repo from inside it ("
+              + os.path.relpath(EFF, ROOT) + ").\n\n" + REF_HINT)
 
 allow()
 '

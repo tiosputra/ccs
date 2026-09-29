@@ -269,7 +269,7 @@ check_guard() {
   [ -x "$t" ] || { finding med guard "guard-test.sh is missing - the guard's behaviour is unpinned"; return 0; }
   out="$("$t" -q 2>/dev/null | tail -1)"
   case "$out" in
-    *fail=0) ok guard "${out%%	*} guard cases pass - repos/ sealed, reads unblocked" ;;
+    *fail=0) ok guard "${out%%	*} guard cases pass - source branches protected, checkouts writable" ;;
     *)       finding high guard "guard-test.sh reports $out - run .claude/scripts/guard-test.sh for the failing cases" ;;
   esac
 }
@@ -436,12 +436,12 @@ check_artifacts() {
         continue
       fi
       # An in-place task holds a checkout only while it is on the task branch;
-      # moved by hand, the guard seals it and the task cannot write there.
+      # moved by hand, the task's work lands on whatever branch it was moved to.
       [ "$(task_isolation "$task")" = inplace ] || continue
       local on
       on="$(git -C "$ROOT/repos/$repo" symbolic-ref --short -q HEAD 2>/dev/null || echo detached)"
       if [ "$on" != "$(task_branch "$task")" ]; then
-        finding med artifacts "repos/$repo is on '$on', not task '$task''s branch - the task no longer holds it, so the guard seals it; task.sh start $task $repo puts it back"
+        finding med artifacts "repos/$repo is on '$on', not task '$task''s branch - edits there no longer land on the task branch; task.sh start $task $repo puts it back"
         bad=$((bad + 1))
       fi
     done
