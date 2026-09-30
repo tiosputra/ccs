@@ -40,8 +40,8 @@ stop and say so — there is no PR to open.
 
 Everything from here runs **once per repo in that list**, from inside that repo's
 `workdir` — the report prints it, and so does `task.sh where <task> <repo>`. For an
-in-place task it is `repos/<repo>`, which the guard lets you commit in only while the
-task holds it, and only to push the task branch.
+in-place task it is `repos/<repo>`. Push only the task branch: work reaches the base
+branch through the pull request, never directly.
 
 ---
 

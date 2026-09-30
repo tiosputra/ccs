@@ -19,17 +19,25 @@ touches. Where those are is the task's **isolation**, chosen when it starts:
 If a task has not started yet, start it with `/task start <task> <repos> --from <ref>`
 (add `--space` for a space) before editing anything. `/plan-prd` does this at Gate 1.
 
-### repos/ is sealed unless a task holds it
+### repos/ is writable; a source branch is never deleted
 
-`repos/<repo>` is the repo's own checkout. It is writable only while an in-place
-task holds it: its HEAD is on that task's branch, and the task's metadata lists the
-repo. Otherwise it is read-only — no edits, no generators, no `git checkout` or
-`git switch`, nothing that moves it. Only `task.sh` switches a checkout's branch.
+`repos/<repo>` is the repo's own checkout, and it is treated like a space's
+worktree: files, generators and git all work there, whether or not a task holds it.
+The task is still how work is organised — `task.sh` switches a checkout onto the
+task branch and back, and `/pr` commits and opens the pull request — but that is
+the workflow, not a wall.
 
-Inside a checkout a task holds, `git add`, `git commit`, and `git push` of the task
-branch are allowed — `/pr` uses them. Pushing any other branch is not: work reaches
-the base branch through a pull request, never directly. A space's worktrees allow
-the same. The guard hook enforces all of this; it is not a matter of judgment.
+What the guard hook does enforce, in `repos/` and in every space alike, is that a
+**source branch is never deleted**: not locally, not its remote-tracking ref, not on
+the remote, and not by renaming it. A repo's source branches are every base a task
+records for it, the branch a task will return its checkout to, `TASK_DEFAULT_BASE`,
+and the remote's default branch. A push with `--mirror` or `--prune` is refused
+too, since it can delete one without naming it. For the same reason `repos/` itself,
+a checkout's root and its `.git` are never written or removed directly — they hold
+every branch; git writes there as usual. Any other branch may be deleted.
+
+Work still reaches the base branch through a pull request, never by pushing to it
+directly. That is this workspace's rule; the guard does not refuse it, so keep it.
 
 Commit when the work is done and reviewed, as part of `/pr`. Do not scatter checkpoint
 commits through an implementation run.
@@ -83,9 +91,9 @@ libraries, what to log, which tools to reach for first, how to review. It does n
 govern **where work happens or how it ships**, which is this workspace's job and is
 the same for every repo:
 
-- `repos/` stays sealed unless a task holds it, and a repo in `REFERENCE_REPOS`
-  stays read-only everywhere. A file inside a checkout cannot grant write access to
-  that checkout; the guard hook enforces this whatever an `AGENTS.md` says.
+- A source branch is never deleted, and a repo in `REFERENCE_REPOS` stays
+  read-only everywhere. A file inside a checkout cannot change either; the guard
+  hook enforces both whatever an `AGENTS.md` says.
 - One task, one set of working directories, one `docs/<YYYY-MM-DD>_<task>/`
   directory, and the two gates. A repo whose `AGENTS.md` describes its own plan-then-execute workflow
   describes work inside the repo; the task's `prd.md`, `plan.md`,
