@@ -325,5 +325,4 @@ PRs are open frees the checkout, the pushed branch stays on the remote, and
   creating a duplicate.
 - **Large PR (>20 files)**: note the size and, if the changes separate cleanly, say how —
   but still open it. Splitting is the user's call.
-- **Repo is not in the task**: never commit in a checkout the task does not hold. The guard
-  refuses it; add the repo with `/task start <task> <repo>` first, which is the user's call.
+- **Repo is not in the task**: never commit in a checkout the task does not hold. Add the repo with `/task start <task> <repo>` first, which is the user's call.

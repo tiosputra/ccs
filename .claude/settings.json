@@ -19,9 +19,6 @@
       "Bash(bash -n .claude/scripts/release-notes.sh)",
       "Bash(.claude/scripts/graph.sh:*)",
       "Bash(bash -n .claude/scripts/graph.sh)",
-      "Bash(.claude/scripts/guard-test.sh)",
-      "Bash(.claude/scripts/guard-test.sh -q)",
-      "Bash(bash -n .claude/scripts/guard-test.sh)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
@@ -32,19 +29,6 @@
       "Bash(gh pr checks:*)",
       "Bash(gh pr diff:*)",
       "Bash(gh auth status)"
-    ]
-  },
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR/.claude/scripts/guard.sh\""
-          }
-        ]
-      }
     ]
   }
 }

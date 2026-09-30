@@ -1,6 +1,6 @@
 ---
 name: ccs-conventions
-description: How this workspace's own machinery is built - the script/command split, how a slash command and a skill are shaped, the guard's real constraints, and the naming rules that keep one task one word. Use when creating or editing anything under .claude/, CLAUDE.md, or the workspace README - not when working on a service repo.
+description: How this workspace's own machinery is built - the script/command split, how a slash command and a skill are shaped, why no hook enforces the rules, and the naming rules that keep one task one word. Use when creating or editing anything under .claude/, CLAUDE.md, or the workspace README - not when working on a service repo.
 metadata:
   origin: workspace
 ---
@@ -53,7 +53,7 @@ is a new line in the script, not a new paragraph in the command.
 | A user-typed multi-step procedure | a **command** | `/name` is the trigger; it can eagerly run a script by putting a bang directly before a backticked command |
 | Rules that apply whenever a kind of file is touched | a **skill** | Auto-triggers from its `description`; no one has to remember it |
 | The same procedure reachable without typing a command | a **skill** that routes to the script | Skills are model-triggered, commands are user-triggered |
-| A hard rule that must hold even if a session ignores it | a **hook** | `guard.sh`. Prose is advice; a `PreToolUse` hook is enforcement |
+| A hard rule that must hold even if a session ignores it | not a hook — see *No hook enforces the rules* | Put it on the remote (branch protection) or in `permissions.deny` |
 
 **Almost never build an agent.** Agents start with no context and cannot write
 back to the session that spawned them. Workspace bookkeeping needs exactly the
@@ -211,8 +211,7 @@ owns tasks, so a `task-manager` beside it splits the concept in two.
 and a repo into a working directory; `task.sh where` prints it; every command,
 script and hand-off asks rather than building `repos/<repo>` or
 `spaces/<task>/<repo>` itself. A new script that needs a task's files sources
-`tasklib.sh`. The guard is the one exception: it reads the same metadata format
-from python, and `tasklib.sh`'s header documents that format for both.
+`tasklib.sh`, whose header documents the metadata format.
 
 **One task, one directory.** Everything written about a task lives in
 `docs/<YYYY-MM-DD>_<task>/`. The standard artifacts have fixed names that
@@ -269,98 +268,33 @@ that already exist. A task started under an old prefix keeps working — its
 metadata records its branch, and adding a repo to it reuses that branch. Only a
 new task picks up the new prefix.
 
-## The guard is the only enforcement
+## No hook enforces the rules
 
-`guard.sh` is a `PreToolUse` hook, and it is not a matter of judgment.
-Everything else in `.claude/` is advice a session can talk itself out of. It
-enforces three rules:
+The workspace once had `guard.sh`, a `PreToolUse` hook over `Write`, `Edit` and
+`Bash` that judged every command by matching regexes against its raw text. It
+was removed on 2026-09-30. Do not rebuild it without answering what went wrong:
 
-- **`repos/<repo>` is sealed unless an in-place task owns it.** Owned means the
-  checkout's HEAD is the task branch *and* the task's metadata lists the repo,
-  both read from files, no subprocess. A branch switched by hand is not a task,
-  and metadata whose checkout moved on holds nothing. Any doubt — unreadable HEAD
-  or metadata — reads as not owned. The checkout root and its `.git` stay sealed
-  even when owned.
-- **In an owned checkout, git may add, commit, and push the task branch.**
-  `checkout`, `switch`, `reset`, `rebase`, `merge`, `pull` and the mutating
-  `branch`/`tag`/`worktree` forms are refused — only `task.sh` moves branches —
-  and a push whose destination is not the task branch is refused, as are
-  `--all`, `--delete` and an empty-ref push. Work reaches the base branch through
-  a PR.
-- **`REFERENCE_REPOS` are read-only everywhere**, in `repos/` whatever a task
-  claims, and in `spaces/<task>/<repo>/…`. The guard resolves that setting
-  through `config.sh`, so the environment can pin it for a test run and an
-  unreadable `.env` degrades to an empty list, never to unsealing anything.
-  `task.sh` reads it as well, so no task includes a reference repo; the guard
-  covers it anyway.
+- **It could not fail open.** The hook ran ~450 lines of Python inside a
+  single-quoted `python3 -c '…'`. One apostrophe in a comment ended the string,
+  bash exited 2 on the syntax error, and exit 2 is the code a hook uses to
+  *block* — so every Bash, Edit and Write call in every session was refused,
+  including the edit that would have fixed it.
+- **Its precision was a regex over shell text.** Reads were refused as writes
+  (`2>/dev/null` after a `cd`, `git branch --list`, an ASCII arrow in a heredoc,
+  a `$VAR` redirect target), and each fix added more rules to get wrong.
 
-Plain commands are judged where they run: the directory a command `cd`s into,
-or else the session's cwd. So `git commit` from a session already sitting inside
-a sealed checkout is refused just as `git -C repos/<repo> commit` is.
+The rules it enforced are still rules — `CLAUDE.md` states them — and are kept
+the way every other rule here is: by sessions following them. Where one must
+hold even if a session does not, put it where it cannot brick a session:
 
-It reads command text rather than a parsed shell, so its precision is a design
-choice rather than a guarantee. It aims to be exact in both directions: a write
-that slips through is the obvious failure, but a read wrongly refused is a tax
-on every session, and for a while it charged one.
+- **Base branches**: branch protection on the remote. It stops a deletion or a
+  direct push from anyone, not only from an agent.
+- **Reference repos**: optionally, per-machine `permissions.deny` entries such
+  as `Edit(repos/mobile/**)` in the gitignored `.claude/settings.local.json`.
 
-What passes:
-
-- Reading. `grep`, `find`, `cat`, `git log`, `git status`, `git diff`,
-  `git show`, `git for-each-ref` against `repos/` all pass.
-- **Redirects whose target is not inside a sealed checkout.** `cd repos/<repo> &&
-  ls 2>/dev/null` is fine, as are `2>&1`, `> /tmp/out`, and a write into a space
-  or a checkout a task holds. The guard resolves each redirect target against the
-  directory the command runs in, so only one that genuinely lands in a sealed
-  checkout is refused.
-- **File commands judge the paths they name.** `rm`, `cp`, `mv`, `mkdir`,
-  `sed -i` and friends are refused only for an argument that resolves into a
-  sealed checkout: an absolute path, or one starting at `repos/` or `spaces/`. A
-  word that merely contains `repos` (`$SP/ws/repos`, `myrepos`) is not a path to
-  it, and an argument with an unexpanded `$VAR` is left alone rather than
-  guessed at.
-- **Read-only forms of the dual verbs.** `branch`, `tag`, `worktree` and
-  `stash` each have a form that only reports: `git -C repos/X branch --list`,
-  `-a`, `--merged`, `--show-current`, `tag -l`, `worktree list`, `stash list`,
-  and bare `git branch` / `git tag`. Their mutating forms — `branch -d`,
-  `branch -m`, a bare new branch name, `worktree add`, `stash pop` — are
-  blocked as before.
-- **An ASCII arrow is not a redirect.** `->` and `=>` never introduce one in
-  shell, so a heredoc or a printed line reading
-  `spaces/x/<repo> -> repos/<repo>` passes.
-- **`repos/README.md`.** It is tracked here (the gitignore un-ignores it) and
-  describes the roster rather than living inside a checkout, so it is writable
-  from a session. `repos/` itself, every `repos/<repo>/…` path, and a lookalike
-  such as `repos/README.md.bak` stay sealed.
-- `git add`/`commit`/`push` are expected in a space and in an owned checkout,
-  and blocked in a sealed one — and blocked everywhere when the repo is
-  reference-only.
-- **A reference alias is matched as a whole path segment.** With
-  `REFERENCE_REPOS=mobile`, `spaces/t/mobile-app/…` is writable and so is
-  `spaces/t/<repo>/src/mobile/…`; only `spaces/t/mobile` and what is under it
-  is sealed. A task literally named `mobile` — `spaces/mobile/<repo>/…` — is
-  unaffected, because the alias is matched in the repo position, not the task
-  position.
-
-Residual cases, still worked around rather than weakened — an over-eager guard
-is the right failure direction:
-
-- A **literal `> repos/<repo>/f.txt` inside a heredoc body** is still read as a redirect,
-  because the guard does not track heredoc boundaries. Put that content in a
-  file and run the file.
-- Deep quoting, `eval`, and command substitution can still fool the text match
-  either way. Nothing here is a substitute for not trying.
-- A file command naming a path through an unexpanded variable
-  (`rm -rf $DIR/src`) is not judged, because its value is unknown to the guard.
-  The file tools and redirects into a literal path still are.
-
-If you change the guard, run the full battery, not one payload — every
-relaxation above is one a plausible regex change would undo silently.
-`guard-test.sh` builds a fixture workspace for the ownership cases - owned,
-unowned, handmade branch, space-isolated, `gitdir:` pointer, reference repo,
-unreadable metadata - so they run without a real task. The header comment
-carries a single hand-test payload for a smoke check. A guard
-that exits non-zero on a malformed payload bricks the session, which is why it
-fails open on anything unexpected — keep that property.
+If a hook is ever added again: keep its logic in its own file (a `.py`, never a
+quoted string), have the wrapper allow on any exit other than a deliberate
+block, and have `/ccs` syntax-check it.
 
 ## Improving the system
 

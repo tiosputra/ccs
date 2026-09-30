@@ -256,22 +256,7 @@ check_settings() {
   for ref in $(grep -ohE '\.claude/scripts/[a-z0-9-]+\.sh' "$f" | sort -u); do
     [ -f "$ROOT/$ref" ] || { finding med settings "a permission allows $ref, which does not exist"; bad=$((bad+1)); }
   done
-  grep -q 'guard.sh' "$f" || { finding high settings "guard.sh is not wired as a PreToolUse hook - repos/ is unprotected"; bad=$((bad+1)); }
-  [ "$bad" -eq 0 ] && ok settings "valid, guard wired, permissions point at real scripts"
-}
-
-check_guard() {
-  # The guard is the only enforcement in the workspace, and it is regexes over
-  # raw command text - so the check is not "does it exist" but "does it still
-  # block what it must and pass what it must". guard-test.sh holds the cases;
-  # a failure names them.
-  local t="$SCRIPT_DIR/guard-test.sh" out
-  [ -x "$t" ] || { finding med guard "guard-test.sh is missing - the guard's behaviour is unpinned"; return 0; }
-  out="$("$t" -q 2>/dev/null | tail -1)"
-  case "$out" in
-    *fail=0) ok guard "${out%%	*} guard cases pass - source branches protected, checkouts writable" ;;
-    *)       finding high guard "guard-test.sh reports $out - run .claude/scripts/guard-test.sh for the failing cases" ;;
-  esac
+  [ "$bad" -eq 0 ] && ok settings "valid, permissions point at real scripts"
 }
 
 check_config() {
@@ -350,8 +335,7 @@ check_branch_prefix() {
 
 check_legacy_branches() {
   # Task branches left over from an earlier prefix. `for-each-ref` gives a
-  # stable machine-readable format, which is why it is used here; the guard now
-  # also permits `git branch --list` against repos/. These branches are the
+  # stable machine-readable format, which is why it is used here. These branches are the
   # user's to rename or delete - some carry commits that exist on no remote -
   # so they are reported, never touched.
   local tasks task repo ref pfx bad=0
@@ -473,7 +457,6 @@ cmd_check() {
   check_path_layout
   check_agents
   check_settings
-  check_guard
   check_docs_commands
   check_config
   check_doc_prefix

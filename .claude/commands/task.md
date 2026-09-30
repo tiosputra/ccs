@@ -83,7 +83,7 @@ The first line of the result says which `mode` ran. Follow the matching
 section below and ignore the others.
 
 Per this project's CLAUDE.md: checkouts in `repos/` are writable like a space's
-worktrees, and a source branch is never deleted - the guard hook enforces that.
+worktrees, and a source branch is never deleted.
 Committing is `/pr`'s job at the end of a task, not something to do while it is
 being worked. A repo in `REFERENCE_REPOS` is read-only everywhere.
 
@@ -135,7 +135,7 @@ tasks use them. This is the answer to "what can I work on" and to "what would a
 bare `/task start` include". Any checkout marked `reference-only` is neither.
 
 If a repo the user expects is missing, the fix is to clone it into `repos/` -
-theirs to do, since the guard blocks writes there. Never propose editing a doc to
+theirs to do, since `repos/` itself is never written directly. Never propose editing a doc to
 add it; nothing in the workspace keeps a list.
 
 ### mode: finish - nothing has changed yet

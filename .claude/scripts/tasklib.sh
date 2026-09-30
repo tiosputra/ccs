@@ -9,8 +9,7 @@
 #
 # Everything that needs to find a task's files asks here instead of building a
 # path, so the layout is decided in one place. task.sh writes the metadata;
-# graph.sh, ccs.sh and task.sh read it through these functions. guard.sh reads
-# the same file format from python.
+# graph.sh, ccs.sh and task.sh read it through these functions.
 #
 # Metadata is one TSV file per task, gitignored:
 #

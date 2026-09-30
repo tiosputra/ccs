@@ -52,12 +52,11 @@ experiment, with no stashing and no `git checkout` whiplash between them.
 │       ├── tasklib.sh      where a task's work lives - the one place that knows
 │       ├── ccs.sh          checks the workspace system itself
 │       ├── learn.sh        which learned facts exist, and whether they are stale
-│       ├── graph.sh        code-review-graph graphs, kept outside the repos they describe
-│       └── guard.sh        PreToolUse hook - never deletes a source branch; reference repos read-only
+│       └── graph.sh        code-review-graph graphs, kept outside the repos they describe
 ```
 
 `repos/<repo>` is writable, like a space's worktree - files and git alike. What
-the guard refuses is deleting or renaming a source branch (a task's base, the branch
+never happens is deleting or renaming a source branch (a task's base, the branch
 a task returns a checkout to, `TASK_DEFAULT_BASE`, the remote's default branch), in
 `repos/` or a space. Repos listed in `REFERENCE_REPOS` are read-only everywhere.
 
@@ -101,8 +100,8 @@ REFERENCE_REPOS=mobile,partner
 ```
 
 From then on `/task repos` marks them `reference-only`, `/task start` leaves them
-out of the default set and refuses if you name one, and the guard hook blocks
-every write to them in `repos/` **and** in any space. Reading, grepping and
+out of the default set and refuses if you name one, and no session writes to
+them, in `repos/` **or** in any space. Reading, grepping and
 `git log` stay untouched — that is what the repo is there for.
 
 The list is per machine, like the branch prefix, so no tracked file names it.
@@ -360,13 +359,12 @@ no task and no `/pr`; `ccs-conventions` describes how its pieces are shaped.
 ## Rules
 
 - A source branch is never deleted, and reference repos are read-only — see
-  `CLAUDE.md`. A `PreToolUse` hook (`.claude/scripts/guard.sh`) enforces both, so
-  this is not a matter of judgment.
+  `CLAUDE.md`. No hook enforces either; protect base branches on the remote too.
 - Read a repo's `AGENTS.md` before planning or writing in it, and follow it over
   any skill here. It belongs to that repo's team: change it in a task, through
   `/pr`, and never restate it under `.claude/`.
 - A repo listed in `REFERENCE_REPOS` is read-only everywhere, in `repos/` and in
-  any space. The same hook enforces that.
+  any space.
 - `git add`, `git commit`, and `git push` of the task branch are fine in a task's
   working directories. Committing happens once, at the end, through `/pr` — not
   as checkpoints during a build — and work reaches the base branch only through

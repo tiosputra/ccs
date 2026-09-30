@@ -22,7 +22,7 @@
 #   task.sh slash <args...>         dispatcher for the /task command
 #
 #   Repos named in REFERENCE_REPOS (.env, comma list) are read-only: a task
-#   never includes them, and the guard hook refuses writes to them anywhere.
+#   never includes them, and no session writes to them anywhere.
 #
 #   repos   comma list of aliases - `task.sh repos` lists them. Default: every
 #           checkout except the reference-only ones.
@@ -90,8 +90,8 @@ all_repos() {
 }
 
 # Repos kept for reference only - read, search, ask questions, never edit.
-# REFERENCE_REPOS is a comma list of aliases; guard.sh reads the same setting
-# and seals them in repos/ and in every space.
+# REFERENCE_REPOS is a comma list of aliases, read-only in repos/ and in every
+# space.
 is_reference_repo() {
   local want="$1" list
   list=",${REFERENCE_REPOS//[[:space:]]/},"
@@ -458,8 +458,8 @@ cmd_repos() {
   if [ "$refs" -gt 0 ]; then
     info ""
     info "$refs reference-only (REFERENCE_REPOS in .env): read them, ask about"
-    info "them, never edit them. No task includes them and the guard refuses"
-    info "writes to them everywhere."
+    info "them, never edit them. No task includes them, and nothing writes to"
+    info "them anywhere."
   fi
 }
 

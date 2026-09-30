@@ -57,7 +57,7 @@ missing, say which and stop - do not guess a path or go looking for a repo.
   a path. Nothing else under the workspace root: not the plan, not the PRD, not
   another repo, not `.claude/`.
 - Never stage, commit, push, or switch branches. Committing is `/pr`'s, once, at
-  the end; the guard refuses branch moves anyway.
+  the end, and only `task.sh` moves branches.
 - Never add, upgrade or remove a dependency unless the plan names that change.
   If the work needs one, stop and report it.
 - Never run a linter or formatter as part of the change where the repo's

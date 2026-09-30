@@ -27,17 +27,21 @@ The task is still how work is organised — `task.sh` switches a checkout onto t
 task branch and back, and `/pr` commits and opens the pull request — but that is
 the workflow, not a wall.
 
-What the guard hook does enforce, in `repos/` and in every space alike, is that a
-**source branch is never deleted**: not locally, not its remote-tracking ref, not on
-the remote, and not by renaming it. A repo's source branches are every base a task
-records for it, the branch a task will return its checkout to, `TASK_DEFAULT_BASE`,
-and the remote's default branch. A push with `--mirror` or `--prune` is refused
-too, since it can delete one without naming it. For the same reason `repos/` itself,
-a checkout's root and its `.git` are never written or removed directly — they hold
-every branch; git writes there as usual. Any other branch may be deleted.
+What never happens, in `repos/` and in every space alike, is deleting a **source
+branch**: not locally, not its remote-tracking ref, not on the remote, and not by
+renaming it. A repo's source branches are every base a task records for it, the
+branch a task will return its checkout to, `TASK_DEFAULT_BASE`, and the remote's
+default branch. Do not push with `--mirror` or `--prune` either, since either can
+delete one without naming it, and do not write or remove `repos/` itself, a
+checkout's root, or its `.git` directly — they hold every branch. Any other branch
+may be deleted.
 
-Work still reaches the base branch through a pull request, never by pushing to it
-directly. That is this workspace's rule; the guard does not refuse it, so keep it.
+Work reaches the base branch through a pull request, never by pushing to it
+directly.
+
+No hook enforces these rules; they hold because every session follows them. The
+remote's own branch protection is what stops a base branch being deleted or pushed
+to for good.
 
 Commit when the work is done and reviewed, as part of `/pr`. Do not scatter checkpoint
 commits through an implementation run.
@@ -57,9 +61,8 @@ REFERENCE_REPOS=mobile,partner
 ```
 
 Run `/task config` to see what this machine resolves to, or `/task repos`,
-which marks them in the roster. The guard hook reads the same setting and
-refuses writes to them in `repos/` and in every space alike; `/task start`
-leaves them out, and refuses outright if you name one.
+which marks them in the roster. Never write to them, in `repos/` or in any
+space; `/task start` leaves them out, and refuses outright if you name one.
 
 Reading, searching, `git log`, `git diff`, answering questions about them —
 all fine, and the point. If a change genuinely belongs in one, say so and stop:
@@ -92,8 +95,8 @@ govern **where work happens or how it ships**, which is this workspace's job and
 the same for every repo:
 
 - A source branch is never deleted, and a repo in `REFERENCE_REPOS` stays
-  read-only everywhere. A file inside a checkout cannot change either; the guard
-  hook enforces both whatever an `AGENTS.md` says.
+  read-only everywhere. A file inside a checkout cannot change either, whatever
+  an `AGENTS.md` says.
 - One task, one set of working directories, one `docs/<YYYY-MM-DD>_<task>/`
   directory, and the two gates. A repo whose `AGENTS.md` describes its own plan-then-execute workflow
   describes work inside the repo; the task's `prd.md`, `plan.md`,

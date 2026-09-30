@@ -22,7 +22,7 @@ makes the next session slightly wronger than the last.
 
 ```
 /ccs                              what is out of date right now
-/ccs note the guard blocks 2>/dev/null after cd repos/
+/ccs note task.sh start fails when the base ref is a tag
 /ccs notes                        everything recorded so far
 ```
 

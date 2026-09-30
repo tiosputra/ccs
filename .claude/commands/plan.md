@@ -58,7 +58,7 @@ run `.claude/scripts/task.sh list` to see whether that task is already open, and
 Once bound, the session works only in that task's working directories, exactly as
 `task.sh where` prints them - `repos/<repo>` for an in-place task, `spaces/<task>/<repo>`
 for a space. Never build one by hand, and never plan a write into a checkout the task
-does not hold: the guard refuses it (see `CLAUDE.md`).
+does not hold (see `CLAUDE.md`).
 
 If the work turns out to need a repo that is not in the task, stop and say so.
 Adding it is `/task start <task> <repo>` — the user's call, not an assumption.
@@ -522,7 +522,7 @@ Assistant:
 
 **CRITICAL**: This command will **NOT** write any code until you explicitly confirm the plan with "yes" or "proceed" or similar affirmative response.
 
-**CRITICAL**: This command never plans a write outside the task's working directories. Every path comes from `task.sh where`; a checkout outside the task is another task's work, even though the guard would let you write there.
+**CRITICAL**: This command never plans a write outside the task's working directories. Every path comes from `task.sh where`; a checkout outside the task is another task's work, even though nothing stops you writing there.
 
 If you want changes, respond with:
 - "modify: [your changes]"
