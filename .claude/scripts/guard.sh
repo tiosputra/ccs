@@ -312,7 +312,26 @@ def owned_violation(sub, rest, detail):
         return None
     return "git " + sub + " moves history or the branch"
 
+# A redirect is shell plumbing, not an argument to git: `2>&1`, `>out`, and
+# `> out` with its target in the next word. Left in, `git push origin HEAD 2>&1`
+# reads as a push to a ref named `2>`. The targets are judged on their own below.
+REDIRECT_WORD = re.compile(r"^(?:\d*>>?|&>>?|\d*<)(.*)$")
+
+def without_redirects(rest):
+    out, target_next = [], False
+    for t in rest.split():
+        if target_next:
+            target_next = False
+            continue
+        m = REDIRECT_WORD.match(t)
+        if m:
+            target_next = m.group(1) == ""
+            continue
+        out.append(t)
+    return " ".join(out)
+
 def judge_git(kind, detail, sub, rest, where):
+    rest = without_redirects(rest)
     if kind in ("repos", "reference"):
         if git_call_mutates(sub, rest):
             block("BLOCKED: that git command would change a sealed checkout: "
@@ -322,10 +341,14 @@ def judge_git(kind, detail, sub, rest, where):
         if why:
             block("BLOCKED: " + why + " (" + where + ").\n\n" + owned_hint(detail))
 
+# A git call's arguments run to the next ; && || | or newline. The & of a >& or
+# &> redirect belongs to the call, so `git push origin HEAD 2>&1 main` still
+# shows `main` to the push check instead of ending at `2>`.
+GIT_REST = r"(?:>&|&>|[^\n;&|])*"
 GIT_C = re.compile(CMDPOS + r"(?:sudo\s+)?git\s+(?:-\S+\s+)*-C\s+(?:\"|\x27)?"
                    r"(?P<path>[^\s\"\x27]+)"
-                   r"(?:\"|\x27)?\s+(?:-\S+\s+)*(?P<sub>\S+)(?P<rest>[^\n;&|]*)")
-GIT_PLAIN = re.compile(CMDPOS + r"(?:sudo\s+)?git\s+(?:-\S+\s+)*(\S+)([^\n;&|]*)")
+                   r"(?:\"|\x27)?\s+(?:-\S+\s+)*(?P<sub>\S+)(?P<rest>" + GIT_REST + r")")
+GIT_PLAIN = re.compile(CMDPOS + r"(?:sudo\s+)?git\s+(?:-\S+\s+)*(\S+)(" + GIT_REST + r")")
 
 for m in GIT_C.finditer(cmd):
     kind, detail = checkout_of(resolve(m.group("path"), EFF))
