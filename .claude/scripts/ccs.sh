@@ -150,9 +150,15 @@ check_skills() {
 # belong in a learned file, and is wrong for every other project. The list comes
 # from disk, so this check names no project itself.
 #
-# A name counts only where it is used as a name: backticked (`api`, `api/src`) or
-# as a path segment (repos/api, api/src/). A repo called "backend" must not flag
-# "backend logic" or `backend-patterns`.
+# A name counts only where it is used as a name: backticked, alone or as the
+# first segment of a path (`api`, `api/src`). Repos are often named with plain
+# words, so a repo called "service" must not flag "a service/repository layer",
+# nor "backend" flag "backend logic" or `backend-patterns`. A prefixed path
+# (repos/api, spaces/t/api) is check_path_layout's to report.
+#
+# ccs-conventions is skipped here as it is there: it documents the guard, and
+# its examples use the same aliases as guard-test.sh's fixture (`mobile`,
+# `partner`), which any machine may also have checked out.
 known_repo_names() {
   local d
   { all_repo_names
@@ -165,7 +171,8 @@ check_skill_facts() {
   for name in $(known_repo_names); do
     for f in "$CLAUDE_DIR"/skills/*/*.md "$CLAUDE_DIR"/agents/*.md; do
       [ -f "$f" ] || continue
-      hits="$(grep -cE "$bt$name($bt|/)|(^|[^[:alnum:]_./-])(repos/|spaces/[^/[:space:]]+/)?$name/[[:alnum:]_.]" "$f" 2>/dev/null)"
+      case "$f" in */skills/ccs-conventions/*) continue ;; esac
+      hits="$(grep -cE "$bt$name($bt|/)" "$f" 2>/dev/null)"
       [ -n "$hits" ] || hits=0
       if [ "$hits" -gt 0 ]; then
         finding med skills "${f#$ROOT/} names repo '$name' $hits time(s) - repo facts belong in .claude/learned/$name/, not in a skill"
