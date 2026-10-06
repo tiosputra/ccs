@@ -23,7 +23,8 @@ in every repo it touches. Where that branch is worked on is the task's
 Both kinds can be open at once. Git forbids only the same branch in two working
 trees, and every task has its own. The one impossible case is two in-place tasks
 on the same repo: `start` refuses a repo that is dirty or on another task's
-branch and says to use `--space`. It never changes a task's layout on its own.
+branch and says to use `--space`. It never changes a task's layout on its own:
+a task is in place unless `--space` is passed, and no setting changes that.
 
 **Never build a task's path yourself.** Ask for it:
 
@@ -123,8 +124,8 @@ Relay what each setting resolved to and which layer won: the environment, the
 gitignored `.env`, or the built-in default. A value read under an old `SPACE_*`
 name still works; say it can be renamed.
 
-This is the answer to "what will my branch be called" and "will a new task work
-in place". Never answer those from memory or from a doc - they differ per
+This is the answer to "what will my branch be called" and "what base will a new
+task start from". Never answer those from memory or from a doc - they differ per
 machine. If the user wants to change one, they edit `.env` (`cp .env.example
 .env` if they have none); a one-off is an environment variable on the command.
 

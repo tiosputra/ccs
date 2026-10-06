@@ -78,11 +78,12 @@ the change touches, and state the proposal in the PRD. Gate 1 is where the user 
 it. Only ask outright if the scope leaves it genuinely unclear — and then fold the question
 into the Phase 1 set rather than spending a separate turn on it.
 
-**Isolation** you propose too. In place is the default: the task works in each
-`repos/<repo>` on its branch. Propose a space (`--space`) when the invocation asked for
-one, or when `task.sh list` shows another in-place task already holding one of the repos —
-a repo takes one in-place task at a time. `task.sh config` says what this machine
-defaults to. State the choice in the PRD; Gate 1 is where the user changes it.
+**Isolation** is not yours to choose. A task works in place — in each `repos/<repo>` on
+its branch — unless the invocation said `--space`; only then does the PRD say `space`.
+Never propose a space on your own. If `task.sh list` shows another in-place task already
+holding one of the repos, or a checkout is dirty, the start will fail: say so in the PRD,
+next to the isolation, and let Gate 1 decide — finish or clean the other work, or rerun
+with `--space`.
 
 ### Phase 1 — FRAME
 
@@ -192,13 +193,13 @@ A criterion you cannot make observable is an Open Question, not a vague AC.
 | Field | Value |
 |---|---|
 | Task | `<task>` |
-| Isolation | `inplace` — each repo worked in `repos/<repo>` · or `space` — worktrees under `spaces/<task>/` |
+| Isolation | `inplace` — each repo worked in `repos/<repo>` · `space` — worktrees under `spaces/<task>/`, only when the invocation said `--space` |
 | Repos | `<repo>`, `<repo>` |
 | New branch | `<prefix>/<task>` (same name in every repo) |
 | Source branch | `origin/feature/m5.1` |
 | Working directories | filled in once started, from `task.sh where <task>` |
 | PR base | `feature/m5.1` — one PR per repo |
-| Command that will start it | `.claude/scripts/task.sh start <task> <repo>,<repo> --from origin/feature/m5.1` (plus `--space` for a space) |
+| Command that will start it | `.claude/scripts/task.sh start <task> <repo>,<repo> --from origin/feature/m5.1` (plus `--space` only if the invocation asked for it) |
 
 Say if the repos, the isolation or the source branch are wrong — this is the moment to
 change them, before any branch exists.

@@ -210,7 +210,9 @@ project and the facts are measured once per repo instead of on every load:
 One kebab-case **task** name is reused everywhere: branch, metadata, space
 directory when it has one, PRD, plan, TDD evidence, wrap-up log. "Task",
 "space", "feature", "story", "bugfix", "hotfix" are the same thing; `.claude/`
-says **task**, and "space" means only the `--space` isolation.
+says **task**, and "space" means only the `--space` isolation. In place is the
+only default, deliberately not a setting: a task gets a space when, and only when,
+someone types `--space`.
 
 The unit of work is a task. Do not introduce a second word for it, and do not
 add a command named for a concept an existing command already owns — `/task`
@@ -241,7 +243,7 @@ split per service. Whoever invokes it passes the report path.
 
 ## Settings are per machine, and no tracked file names one
 
-Branch prefix, default base ref and default isolation differ per person. They
+Branch prefix, default base ref and reference repos differ per person. They
 resolve through `.claude/scripts/config.sh`, highest layer first:
 
 | Layer | Where | For |

@@ -146,8 +146,8 @@ exists, and you see the finished work before anything is pushed.
 
 Both kinds can be open at once. `/task start` refuses an in-place task on a repo
 that is dirty or held by another task, and says to use `--space` — it never
-changes a task's layout on its own. `TASK_DEFAULT_ISOLATION` in `.env` sets which
-one a task gets when neither flag is given.
+changes a task's layout on its own. A task is in place unless it is started
+with `--space`; no setting changes that.
 
 Nothing needs to know which one a task uses: every command asks
 `task.sh where <task> <repo>` for the directory.
@@ -278,7 +278,6 @@ Start flags:
 | `--from <ref>`       | Base ref for new branches. Default `TASK_DEFAULT_BASE`.        |
 | `--from a=x,b=y`     | Per-repo base refs, e.g. `api=origin/release-2`.               |
 | `--space`            | Work in worktrees under `spaces/<task>/`.                      |
-| `--inplace`          | Work in `repos/<repo>` itself (the default).                   |
 | `--branch <name>`    | Override the branch name (default `<prefix>/<task>`).          |
 | `--no-fetch`         | Skip `git fetch`; use whatever refs are already local.         |
 | `--no-env`           | Don't copy `.env*` files into new worktrees.                   |
@@ -318,7 +317,7 @@ changed file paths, without touching anything.
 
 ## Settings
 
-Branch prefix, default base ref and default isolation are **per machine**, not
+Branch prefix, default base ref and reference repos are **per machine**, not
 per workspace. They live in a gitignored `.env` at the root, so everyone differs
 without touching a tracked file:
 
@@ -329,7 +328,6 @@ cp .env.example .env
 ```
 TASK_BRANCH_PREFIX=<your-handle>   # branches become <your-handle>/<task>
 TASK_DEFAULT_BASE=origin/main      # base ref when --from is not given
-TASK_DEFAULT_ISOLATION=inplace     # or space
 ```
 
 Highest wins: the environment, then `.env`, then a built-in default. So a

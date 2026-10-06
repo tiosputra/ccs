@@ -1,6 +1,6 @@
 ---
 name: qa-release-note
-description: Use when writing or reviewing the QA section of deployment notes, or any release note for QA - turning a list of pull requests into plain-language statements of what should be true after the release, grouped by feature, with was/now for deliberate changes and the untested ones marked. Also read by /deployment-notes, which uses the per-repo facts this skill learns - who each path faces, where the app routes links, how the tests carry behaviour.
+description: Use when writing or reviewing the QA section of deployment notes, or any release note for QA - turning a stated set of changes - feature branches compared against their target, or pull requests - into plain-language statements of what should be true after the release, grouped by feature, with was/now for deliberate changes and the untested ones marked. Also read by /deployment-notes, which uses the per-repo facts this skill learns - who each path faces, where the app routes links, how the tests carry behaviour.
 metadata:
   origin: workspace
   learns: true
@@ -9,7 +9,7 @@ metadata:
 
 # QA Release Note
 
-This file is the method: how to turn pull requests into a release note a QA
+This file is the method: how to turn a release's changes into a release note a QA
 team can test from, in any project. Which paths in a repo face which audience,
 where its app routes links, which assertion forms its tests use - those are
 facts about one repo, so they live in its learned file.
@@ -38,15 +38,21 @@ Where `AGENTS.md` and the learned file disagree, `AGENTS.md` wins.
 
 ## Where release facts come from
 
-- **Every release fact comes from `gh`**: state, size, checks, diff, file list.
-  A local checkout is only as fresh as its last fetch, and a stale one reports a
-  repo as having nothing to release, or a 22-file change against a real 51.
+- **Release facts come from the exact commits being shipped**: the feature
+  branch's tip compared against the target branch's tip, both freshly fetched,
+  diffed from their merge base - what a pull request would show, without the
+  size limit a hosted diff gives up at. Never a stale ref: a checkout only as
+  fresh as its last fetch has reported a repo as having nothing to release, or
+  a 22-file change against a real 51.
+- **Read the code on both sides, not only the diff.** The target is what runs
+  today and the feature is what will run; a hunk often only makes sense next to
+  the whole function it lands in.
 - **Architecture comes from a git ref, never a working tree** - deploy
   triggers, contract copies, a route registry. A working tree may be a task's
   branch with unmerged work; it describes that task, not the service.
-- **A release is the list of pull requests the user names.** Nothing infers it.
-  Waves routinely merge a feature branch and a handful of hotfix branches into
-  the same base on the same day.
+- **A release is the set of branches the user names**, one per service.
+  Nothing infers it. Waves routinely merge a feature branch and a handful of
+  hotfix branches into the same base on the same day.
 
 ## The test names are the QA section
 
@@ -110,6 +116,11 @@ now:  only the person who placed the order
   what should be true, not where to click. Do not name a screen the diff cannot
   prove exists.
 - **Group by feature, never by repo.** QA does not know which service moved.
+- **Say which build each section is tested on.** Services usually ship while the
+  new app is still a beta build (TestFlight), so QA tests the beta against
+  production *and* checks the store build still behaves as before. Name the
+  build in a section's lines ("on the new build", "on the store build") and give
+  every deliberate change a store-build guard: what an installed app still does.
 - `was:` / `now:` only on deliberate changes. A bare line is something that
   should already be true and must stay true.
 - **One noun per actor, used consistently.** A change with several easily

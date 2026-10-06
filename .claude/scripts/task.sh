@@ -10,7 +10,7 @@
 #   space     spaces/<task>/<repo>        a worktree per repo, opt in with --space
 #
 # Usage:
-#   task.sh start <task> [repos] [--from <ref>] [--space|--inplace]
+#   task.sh start <task> [repos] [--from <ref>] [--space]
 #                                [--branch <name>] [--no-fetch] [--no-env] [--dry-run]
 #   task.sh where <task> [repo]     working directory, or repo<TAB>dir per repo
 #   task.sh root                    the workspace root, absolute
@@ -30,7 +30,8 @@
 #   --from  base ref for NEW branches. One ref for everything (--from
 #           origin/main) or per-repo overrides (--from api=origin/release-2,
 #           web=origin/main). Default: TASK_DEFAULT_BASE.
-#   --space / --inplace   the task's isolation. Default: TASK_DEFAULT_ISOLATION.
+#   --space the task works in worktrees. Without it the task works in place;
+#           nothing else - no setting, no busy repo - ever picks a space.
 #
 # Examples:
 #   task.sh start fix-promo api,web --from origin/feature/m5.1
@@ -50,11 +51,9 @@ DOCS_DIR="$ROOT/docs"
 . "$SCRIPT_DIR/tasklib.sh"
 cfg_resolve_renamed TASK_BRANCH_PREFIX SPACE_BRANCH_PREFIX ccs
 cfg_resolve_renamed TASK_DEFAULT_BASE SPACE_DEFAULT_BASE origin/main
-cfg_resolve TASK_DEFAULT_ISOLATION inplace
 cfg_resolve REFERENCE_REPOS ""
 BRANCH_PREFIX="$TASK_BRANCH_PREFIX"
 DEFAULT_BASE="$TASK_DEFAULT_BASE"
-DEFAULT_ISOLATION="$TASK_DEFAULT_ISOLATION"
 # Untracked-but-essential files copied from the main checkout into a new
 # worktree (git worktrees only carry tracked files).
 ENV_GLOBS=(".env" ".env.local" ".env.development" ".env.*.local")
@@ -342,7 +341,6 @@ cmd_start() {
       --branch)   branch="${2:-}"; shift 2 ;;
       --branch=*) branch="${1#*=}"; shift ;;
       --space)    isolation=space; shift ;;
-      --inplace|--in-place) isolation=inplace; shift ;;
       --no-fetch) do_fetch=0; shift ;;
       --no-env)   do_env=0; shift ;;
       --dry-run)  dry=1; shift ;;
@@ -369,8 +367,7 @@ cmd_start() {
     isolation="$have"
     [ -n "$branch" ] || branch="$(task_branch "$task")"
   fi
-  [ -n "$isolation" ] || isolation="$DEFAULT_ISOLATION"
-  case "$isolation" in inplace|space) ;; *) die "TASK_DEFAULT_ISOLATION must be inplace or space, not '$isolation'" ;; esac
+  [ -n "$isolation" ] || isolation=inplace
   [ -n "$branch" ] || branch="$BRANCH_PREFIX/$task"
 
   local repos
@@ -474,13 +471,11 @@ cmd_config() {
     "(from $(cfg_source TASK_BRANCH_PREFIX))"
   printf '  %-24s %-16s %s\n' "TASK_DEFAULT_BASE" "$DEFAULT_BASE" \
     "(from $(cfg_source TASK_DEFAULT_BASE))"
-  printf '  %-24s %-16s %s\n' "TASK_DEFAULT_ISOLATION" "$DEFAULT_ISOLATION" \
-    "(from $(cfg_source TASK_DEFAULT_ISOLATION))"
   printf '  %-24s %-16s %s\n' "REFERENCE_REPOS" "${REFERENCE_REPOS:--}" \
     "(from $(cfg_source REFERENCE_REPOS))"
   info ""
   info "  a new task would branch:   ${C_BOLD}$BRANCH_PREFIX/<task>${C_RESET}"
-  info "  and work:                  ${C_BOLD}$DEFAULT_ISOLATION${C_RESET} unless started with --space or --inplace"
+  info "  and work:                  ${C_BOLD}inplace${C_RESET} unless started with --space"
   if [ -n "$REFERENCE_REPOS" ]; then
     info "  read-only everywhere:      ${C_BOLD}${REFERENCE_REPOS}${C_RESET}"
   fi
