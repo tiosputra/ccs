@@ -386,6 +386,12 @@ Now run straight through. No further permission prompts; Gate 1 covered all of t
    - Flutter or Dart (a `pubspec.yaml` at the repo root) -> `flutter-reviewer`
    - And, whatever the language, `database-reviewer` when the diff touches migrations,
      `.sql` files, or query code
+   - Anything none of these covers - CI workflows, Dockerfiles, deploy or env config,
+     shell scripts, YAML - -> `code-reviewer`
+   - And, whatever the language, `security-reviewer` when the diff touches payments or
+     balances, auth, webhooks or provider callbacks, external provider calls, crypto,
+     user input at a boundary, or a dependency manifest. In this workspace that is most
+     backend work; when in doubt, dispatch it.
 
    A repo can take more than one reviewer; dispatch them together.
 
@@ -439,9 +445,14 @@ If milestones remain, offer the next one after the PR is open.
 - `/task` — start, locate or finish a task by hand, outside this flow.
 - `/plan` — plan a later milestone of an existing PRD on its own.
 - `tdd-workflow` and the reviewer agents (`go-reviewer`, `typescript-reviewer`,
-  `react-reviewer`, `flutter-reviewer`, `database-reviewer`) — layout-blind; they are
+  `react-reviewer`, `flutter-reviewer`, `database-reviewer`, `code-reviewer`,
+  `security-reviewer`) — layout-blind; they are
   handed a working directory and a base ref, never a task name.
 - `product-lens` — before this command, when it is not yet clear the idea is worth building.
+- `dev-team`, `council` — before Gate 1, at the user's call: `dev-team` for four role
+  views that feed the PRD, `council` when the PRD has a real fork. Never between gates.
+- `santa-method` — at the user's call, on an `api-contract.md` before consumer teams
+  build against it. Code never needs it; it has the review step and Gate 2.
 - `product-capability`, `architecture-decision-records` — after Gate 1, when a multi-repo
   task's constraints or a settled trade-off need writing down; both land in the task's
   directory.

@@ -100,6 +100,28 @@ check_scripts() {
       bad=$((bad + 1))
     fi
   done
+  # JavaScript: a config a skill hands to a runner, or a library imported from
+  # elsewhere. A library is only reached when something outside it calls it - its
+  # siblings and its own tests requiring it do not count, or an imported chain with
+  # no caller would vouch for itself.
+  for f in "$CLAUDE_DIR"/scripts/*.js "$CLAUDE_DIR"/scripts/lib/*.js; do
+    [ -f "$f" ] || continue
+    name="$(basename "$f")"
+    if command -v node >/dev/null 2>&1 && ! node --check "$f" 2>/dev/null; then
+      finding high scripts "${f#"$CLAUDE_DIR"/} has a syntax error"
+      bad=$((bad + 1))
+      continue
+    fi
+    # The filename, or a require/import string naming it without the extension:
+    # a bare stem like `utils` would match any prose that mentions utilities.
+    refs="$( { grep -rlE -- "${name}|[\"'/]${name%.js}[\"']" "$CLAUDE_DIR" "$ROOT/README.md" "$ROOT/CLAUDE.md" 2>/dev/null || true; } \
+            | grep -v "^$f\$" | grep -v "^$CLAUDE_DIR/tests/" | grep -v "^$CLAUDE_DIR/scripts/lib/" \
+            | grep -v "^$CLAUDE_DIR/ccs-notes.md\$" | wc -l | tr -d ' ')"
+    if [ "$refs" -eq 0 ]; then
+      finding med scripts "${f#"$CLAUDE_DIR"/} is called by nothing outside its own library and tests - nothing invokes it"
+      bad=$((bad + 1))
+    fi
+  done
   [ "$bad" -eq 0 ] && ok scripts "every script parses, is executable, and is referenced"
 }
 
@@ -261,9 +283,27 @@ check_settings() {
   python3 -c "import json,sys;json.load(open('$f'))" 2>/dev/null \
     || { finding high settings "settings.json is not valid JSON"; return 0; }
   for ref in $(grep -ohE '\.claude/scripts/[a-z0-9-]+\.sh' "$f" | sort -u); do
-    [ -f "$ROOT/$ref" ] || { finding med settings "a permission allows $ref, which does not exist"; bad=$((bad+1)); }
+    [ -f "$ROOT/$ref" ] || { finding med settings "settings.json names $ref, which does not exist"; bad=$((bad+1)); }
   done
-  [ "$bad" -eq 0 ] && ok settings "valid, permissions point at real scripts"
+  # A hook may inform, never gate (see ccs-conventions, "No hook enforces the
+  # rules"): each one ends in `exit 0`, so a broken script cannot refuse a session.
+  local cmd
+  while IFS= read -r cmd; do
+    [ -n "$cmd" ] || continue
+    case "$cmd" in
+      *"exit 0") ;;
+      *) finding high settings "hook '$cmd' does not end in 'exit 0' - a failure there could block every session"; bad=$((bad+1)) ;;
+    esac
+  done <<EOF
+$(python3 -c "
+import json
+for evs in json.load(open('$f')).get('hooks', {}).values():
+    for m in evs:
+        for h in m.get('hooks', []):
+            print(h.get('command', '').strip())
+" 2>/dev/null)
+EOF
+  [ "$bad" -eq 0 ] && ok settings "valid, every script it names exists, every hook fails open"
 }
 
 check_config() {
@@ -311,11 +351,12 @@ check_branch_prefix() {
   # Open work only. A closed task's PRD, plan and log record what happened
   # under whatever prefix applied then; rewriting them to satisfy a check
   # would be falsifying the record, so they are skipped. A task is closed once
-  # its directory holds a log.md - that is written just before teardown.
+  # its log.md records a Closed date - /task finish writes it just before
+  # teardown. A log without one is /save-session's working log of an open task.
   local d f task pfx bad=0
   for d in "$ROOT"/docs/*_*/; do
     [ -d "$d" ] || continue
-    [ -f "$d/log.md" ] && continue
+    [ -f "$d/log.md" ] && log_closed "$d/log.md" && continue
     task="$(basename "$d")"; task="${task#*_}"
     [ -n "$task" ] || continue
     for f in "$d"prd.md "$d"plan*.md; do

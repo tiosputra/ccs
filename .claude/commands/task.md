@@ -175,7 +175,14 @@ directory keeps its name no matter how long the task ran. Never rename one to
 the closing date; the closing date goes inside the file.
 
 If `log.md` is already there, read it and revise it in place rather than
-appending a second wrap-up. Use this shape:
+appending a second wrap-up. It usually is: `/save-session` keeps it as the task's
+working log while the task is open, with `Closed: —` in the header, a
+`## Current state` section and a `## Sessions` history. Finishing turns it into the
+wrap-up: set the `Closed` date, write the three sections below, and delete
+`## Current state` - it describes work in flight, and there is none now. Keep
+`## Sessions` beneath them untouched: it is history, and its **Did not work** and
+**Decided** entries are often the best material for *Worth remembering*. A dated
+`Closed` is what marks the task closed to `/ccs`. Use this shape:
 
 ```markdown
 # <task>
@@ -205,6 +212,10 @@ list. The report gives you commit subjects, a diffstat, and changed file
 paths per repo - read the file paths and subjects and say what the work
 actually did. If the evidence is too thin to tell, say so plainly instead of
 inventing a narrative. Never guess at intent the commits do not support.
+
+If *Worth remembering* holds a fact about how the services relate - a table another
+service reads, an event's consumers, a provider behaving unlike its docs - offer to
+add it to the memory graph through `knowledge-ops`. Only offer; write after a yes.
 
 #### 3. Finish
 

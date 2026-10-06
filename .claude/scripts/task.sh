@@ -16,6 +16,7 @@
 #   task.sh root                    the workspace root, absolute
 #   task.sh list [task]             open tasks and the state of each repo
 #   task.sh report <task>           facts for a wrap-up summary (read-only)
+#   task.sh logs                    each open task's working log and when it was saved
 #   task.sh repos                   the roster, read from disk
 #   task.sh config                  resolved settings and where they came from
 #   task.sh finish <task> [repos] [--delete-branch] [--force]
@@ -76,7 +77,7 @@ fail() { printf '  %sx%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; }
 dim()  { printf '    %s%s%s\n' "$C_DIM" "$*" "$C_RESET"; }
 die()  { printf '%serror:%s %s\n' "$C_RED$C_BOLD" "$C_RESET" "$*" >&2; exit 1; }
 
-usage() { sed -n '3,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '3,39p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 # ----------------------------------------------------------------- repos --
 
@@ -520,6 +521,29 @@ cmd_list() {
   [ "$found" -eq 1 ] || info "no open tasks"
 }
 
+# ------------------------------------------------------------------ logs --
+
+# Each open task's working log: the facts /resume-session and the SessionStart
+# hook read. One row per open task, read-only:
+#   log<TAB><task><TAB><docs/.../log.md | -><TAB><last saved | -><TAB><open|closed|none>
+# none means nothing was saved yet; closed means /task finish already wrote the
+# wrap-up but the task record is still open.
+cmd_logs() {
+  local task log rel
+  for task in $(task_names); do
+    if ! log="$(task_log "$task")"; then
+      printf 'log\t%s\t-\t-\tnone\n' "$task"
+      continue
+    fi
+    rel="${log#"$ROOT"/}"
+    if log_closed "$log"; then
+      printf 'log\t%s\t%s\t%s\tclosed\n' "$task" "$rel" "$(log_last_saved "$log")"
+    else
+      printf 'log\t%s\t%s\t%s\topen\n' "$task" "$rel" "$(log_last_saved "$log")"
+    fi
+  done
+}
+
 # ---------------------------------------------------------------- report --
 
 # Everything needed to write a wrap-up summary, gathered while the working
@@ -803,6 +827,7 @@ case "${1:-}" in
   repos)            shift; cmd_repos ;;
   config)           shift; cmd_config ;;
   report)           shift; cmd_report "$@" ;;
+  logs)             shift; cmd_logs ;;
   finish|remove|rm) shift; cmd_finish "$@" ;;
   slash)            shift; cmd_slash "$@" ;;
   *) usage; die "unknown command '$1' - use start, where, list, report, finish, repos, or config" ;;

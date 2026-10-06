@@ -49,7 +49,7 @@ suite before the review rather than after - applies unchanged.
 - AI agent (Claude Code, Cursor, Codex) has modified API routes or backend logic
 - A bug was found and fixed — need to prevent re-introduction
 - Project has a sandbox/mock mode that can be leveraged for DB-free testing
-- Running `/bug-check` or similar review commands after code changes
+- Running `tdd-workflow`'s blind-spot pass (Step 7b), or the review step after it
 - Multiple code paths exist (sandbox vs production, feature flags, etc.)
 
 ## The Core Problem
@@ -228,55 +228,19 @@ describe("GET /api/user/messages (conversation list)", () => {
 });
 ```
 
-## Integrating Tests into Bug-Check Workflow
+## Where this runs in the flow
 
-### Custom Command Definition
+There is no separate bug-check command here: the same sequence is already built into
+the build.
 
-```markdown
-<!-- .claude/commands/bug-check.md -->
-# Bug Check
-
-## Step 1: Automated Tests (mandatory, cannot skip)
-
-Run these commands FIRST before any code review:
-
-    npm run test       # Vitest test suite
-    npm run build      # TypeScript type check + build
-
-- If tests fail → report as highest priority bug
-- If build fails → report type errors as highest priority
-- Only proceed to Step 2 if both pass
-
-## Step 2: Code Review (AI review)
-
-1. Sandbox / production path consistency
-2. API response shape matches frontend expectations
-3. SELECT clause completeness
-4. Error handling with rollback
-5. Optimistic update race conditions
-
-## Step 3: For each bug fixed, propose a regression test
-```
-
-### The Workflow
-
-```
-User: "バグチェックして" (or "/bug-check")
-  │
-  ├─ Step 1: npm run test
-  │   ├─ FAIL → Bug found mechanically (no AI judgment needed)
-  │   └─ PASS → Continue
-  │
-  ├─ Step 2: npm run build
-  │   ├─ FAIL → Type error found mechanically
-  │   └─ PASS → Continue
-  │
-  ├─ Step 3: AI code review (with known blind spots in mind)
-  │   └─ Findings reported
-  │
-  └─ Step 4: For each fix, write a regression test
-      └─ Next bug-check catches if fix breaks
-```
+1. **Tests and build first, mechanically.** `tdd-workflow`'s Step 7 runs the repo's
+   whole suite and its build; a failure there is a bug found with no judgment needed.
+2. **Then the known blind spots.** `tdd-workflow`'s Step 7b, the blind-spot pass, walks
+   the patterns below against the diff — twin paths first.
+3. **Every fix gets its regression test**, written RED first like any other change, so
+   the next run catches it if the fix breaks.
+4. **Then review.** `/plan-prd`'s review step dispatches the language reviewers, which
+   catch what the patterns miss.
 
 ## Common AI Regression Patterns
 
@@ -409,7 +373,7 @@ No bug in /api/user/notifications  → Don't write test (yet)
 **DO:**
 - Write tests immediately after finding a bug (before fixing it if possible)
 - Test the API response shape, not the implementation
-- Run tests as the first step of every bug-check
+- Run tests as the first step of every blind-spot pass
 - Keep tests fast (< 1 second total with sandbox mode)
 - Name tests after the bug they prevent (e.g., "BUG-R1 regression")
 

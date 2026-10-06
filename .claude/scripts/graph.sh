@@ -20,7 +20,7 @@
 #   graph.sh run <target> <query> [args...]  one read-only code-review-graph query
 #   graph.sh drop <task> [repo]              delete a task's graphs (task.sh finish calls this)
 #   graph.sh prune                           delete graphs whose task no longer holds that repo
-#   graph.sh mcp                             rewrite .mcp.json from the checkouts that have a graph
+#   graph.sh mcp                             rewrite .mcp.json: graphs, plus the memory server
 #   graph.sh slash <args...>                 dispatcher for the /graph command
 #
 # <target> is <repo> for repos/<repo>, or <task>/<repo> for that repo's working
@@ -34,7 +34,9 @@
 #
 # .mcp.json is per machine and gitignored: every build rewrites it with one
 # read-only server per repos/ checkout that has a graph, so it names only the
-# services cloned here.
+# services cloned here - and with the `memory` server, the cross-service
+# knowledge graph knowledge-ops keeps in knowledge/memory.jsonl. This script owns
+# the whole file, so nothing added to it by hand survives a build.
 #
 # Writes only under .code-review-graph/ and to .mcp.json. Never writes to a
 # repo, a worktree, or a git index: builds read a scratch copy of the index in
@@ -297,9 +299,15 @@ cmd_build() {
 # build and update, which would write a graph into the checkout.
 MCP_TOOLS="query_graph_tool,get_impact_radius_tool,get_review_context_tool,semantic_search_nodes_tool,get_affected_flows_tool,list_graph_stats_tool"
 
-# Rewrite .mcp.json: one server per repos/ checkout that has a built graph, and
-# nothing else. A task's graph is not served - its working directory changes under it.
-# Claude Code reads the file at startup, so a new server needs a restart.
+# The knowledge graph server. Pinned: npx would otherwise run whatever was
+# published last, at every session start. MEMORY_FILE_PATH must be absolute - the
+# server resolves a relative one against its own install directory.
+MEMORY_PKG="@modelcontextprotocol/server-memory@2026.8.31"
+MEMORY_FILE="$ROOT/knowledge/memory.jsonl"
+
+# Rewrite .mcp.json: one server per repos/ checkout that has a built graph, then the
+# memory server. A task's graph is not served - its working directory changes under
+# it. Claude Code reads the file at startup, so a new server needs a restart.
 write_mcp() {
   local t sep="" n=0 tmp="$MCP_FILE.$$"
   {
@@ -316,10 +324,13 @@ write_mcp() {
       printf '      }\n    }'
       sep=","; n=$((n + 1))
     done
-    [ "$n" -gt 0 ] && printf '\n  '
-    printf '}\n}\n'
+    printf '%s\n    "memory": {\n' "$sep"
+    printf '      "command": "npx",\n'
+    printf '      "args": ["-y", "%s"],\n' "$MEMORY_PKG"
+    printf '      "env": { "MEMORY_FILE_PATH": "%s" }\n' "$MEMORY_FILE"
+    printf '    }\n  }\n}\n'
   } > "$tmp" && mv "$tmp" "$MCP_FILE" || { rm -f "$tmp"; printf 'error\tcould not write %s\n' "$(rel "$MCP_FILE")"; return 1; }
-  printf 'mcp\t%s\t%s server(s)\n' "$(rel "$MCP_FILE")" "$n"
+  printf 'mcp\t%s\t%s graph server(s), plus memory\n' "$(rel "$MCP_FILE")" "$n"
 }
 
 # ------------------------------------------------------------------- status --

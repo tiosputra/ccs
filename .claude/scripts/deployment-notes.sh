@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# release-notes.sh - deterministic facts about a release, from a stated list of
-# pull requests.
+# deployment-notes.sh - deterministic facts about a release, from a stated list
+# of pull requests. /deployment-notes turns them into a dev section (what to
+# prepare, in what order, how to undo it) and a QA section (what should be true).
 #
 # A release is not a branch. One wave routinely merges a feature branch into
 # several repos and, the same day, hotfix branches straight into the same base,
@@ -16,7 +17,9 @@
 # route registry - is a fact about that repo, learned once by
 # `/learn qa-release-note <repo>` into .claude/learned/<repo>/qa-release-note.md.
 # This script reads the two machine-read sections of that file and guesses
-# nothing when it is missing: it prints a `learn` record instead.
+# nothing when it is missing: it prints a `learn` record instead. How a repo is
+# configured, deployed and rolled back is learned by `/learn dev-deployment-note`;
+# no section of that file is machine-read, so the command reads it, not this.
 #
 # Those architecture reads come from a git ref, NEVER from a working tree. A
 # task works on its own branch - in a space's worktree, or in place in
@@ -27,10 +30,10 @@
 # anything else.
 #
 # Usage:
-#   release-notes.sh roll-call <name> <pr-url...>   cheap: state, size, checks
-#   release-notes.sh report    <name> <pr-url...>   full: facts + extraction
-#   release-notes.sh facts     <org/repo> <diff>    local facts for one saved diff, no gh
-#   release-notes.sh slash     <args...>            dispatcher for /release-notes
+#   deployment-notes.sh roll-call <name> <pr-url...>   cheap: state, size, checks
+#   deployment-notes.sh report    <name> <pr-url...>   full: facts + extraction
+#   deployment-notes.sh facts     <org/repo> <diff>    local facts for one saved diff, no gh
+#   deployment-notes.sh slash     <args...>            dispatcher for /deployment-notes
 #
 # Output is key<TAB>value lines. Multi-field records are documented at the head
 # of the section that prints them.
@@ -46,7 +49,7 @@ LEARNED="$ROOT/.claude/learned"
 . "$SCRIPT_DIR/tasklib.sh"
 TODAY="$(date +%Y-%m-%d)"
 
-usage() { sed -n '3,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '3,39p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 warn() { printf 'warn\t%s\n' "$1"; }
 kv()   { printf '%s\t%s\n' "$1" "$2"; }
@@ -247,6 +250,86 @@ facts_migrations() {
   changed_files "$diff" \
     | grep -E '(^|/)migrations?/.*\.(sql|ts|js|go|py|rb)$' \
     | sed "s|^|migration	$slug	|"
+}
+
+# Statements in an added migration that a deploy has to plan around: they lock a
+# table, break the old code still serving during a rollout, or change data that
+# a code rollback will not put back. Added lines only, case-insensitive, in the
+# same files facts_migrations lists - except a down migration, where a DROP is
+# the rollback itself rather than a risk. Over-reports on purpose: a comment that
+# mentions DROP COLUMN is reported, and the reader drops it.
+# ddl<TAB>org/repo<TAB>path<TAB>kind<TAB>statement
+facts_ddl() {
+  awk -v slug="$1" '
+    function emit(kind,   s) {
+      s = substr($0, 2); gsub(/\t/, " ", s); gsub(/^ +| +$/, "", s)
+      if (length(s) > 140) s = substr(s, 1, 137) "..."
+      print "ddl\t" slug "\t" f "\t" kind "\t" s
+    }
+    /^\+\+\+ b\// {
+      f = substr($0, 7)
+      mig = (f ~ /(^|\/)migrations?\/.*\.(sql|ts|js|go|py|rb)$/ && f !~ /(\.down\.|_down\.|\/down\/)/)
+      next
+    }
+    mig && /^\+/ {
+      l = tolower($0)
+      if (l ~ /drop[ \t]+(table|column)/)                emit("drop - irreversible, and breaks code still reading it")
+      if (l ~ /rename[ \t]+(column|to)[ \t]/)            emit("rename - breaks the old code still serving during the rollout")
+      if (l ~ /alter[ \t]+column.*[ \t]type[ \t]|set[ \t]+data[ \t]+type|modify[ \t]+column/) \
+                                                          emit("type change - may rewrite and lock the table")
+      if (l ~ /set[ \t]+not[ \t]+null/)                  emit("not null - fails on existing nulls, and scans the table")
+      if (l ~ /add[ \t]+column[ \t].*not[ \t]+null/ && l !~ /default/) \
+                                                          emit("not null without default - fails on a table that has rows")
+      if (l ~ /create[ \t]+(unique[ \t]+)?index/ && l !~ /concurrently/) \
+                                                          emit("index without concurrently - may block writes while it builds")
+      if (l ~ /add[ \t]+(constraint|foreign[ \t]+key)/ && l !~ /not[ \t]+valid/) \
+                                                          emit("constraint - validates the whole table under a lock")
+      if (l ~ /(^|[^a-z_])(update[ \t]+[a-z_."`]+[ \t]+set[ \t]|delete[ \t]+from[ \t]|truncate[ \t])/) \
+                                                          emit("data change - a code rollback does not undo it")
+    }
+  ' "$2"
+}
+
+# Dependency lines a PR adds or removes in a manifest. A - and a + on the same
+# name is a bump, and the reader pairs them. Lockfiles are left out - they
+# restate the manifest at length - and so are Go's indirect requirements and a
+# package.json's own version field.
+# dep<TAB>org/repo<TAB>manifest<TAB>+|-<TAB>line
+facts_deps() {
+  awk -v slug="$1" '
+    function emit(   s) {
+      s = substr($0, 2); gsub(/\t/, " ", s); gsub(/^ +| +$/, "", s); sub(/,$/, "", s)
+      print "dep\t" slug "\t" f "\t" substr($0, 1, 1) "\t" s
+    }
+    /^\+\+\+ b\// {
+      f = substr($0, 7); n = f; sub(/.*\//, "", n); kind = ""
+      if (n == "go.mod") kind = "go"
+      else if (n == "package.json") kind = "npm"
+      else if (n == "pubspec.yaml") kind = "pub"
+      else if (n ~ /^requirements.*\.txt$/) kind = "pip"
+      else if (n == "pyproject.toml") kind = "pyproject"
+      else if (n == "Gemfile") kind = "gem"
+      next
+    }
+    /^--- / || kind == "" || !/^[+-]/ { next }
+    kind == "go"  && /^[+-][ \t]*(require[ \t]+)?[a-z0-9.-]+\.[a-z]+\/[^ \t]+[ \t]+v[0-9]/ && !/\/\/ indirect/ { emit(); next }
+    kind == "npm" && /^[+-][ \t]*"[@a-z0-9._\/-]+"[ \t]*:[ \t]*"(npm:|workspace:|[~^<>=]*[0-9x*])/ && !/^[+-][ \t]*"version"/ { emit(); next }
+    kind == "pub" && /^[+-][ \t]+[a-z0-9_]+:[ \t]*(\^|>=|any|[0-9])/ { emit(); next }
+    kind == "pip" && /^[+-][A-Za-z0-9_.-]+(\[[^]]*\])?[ \t]*(==|>=|<=|~=|!=|>|<)/ { emit(); next }
+    kind == "pyproject" && /^[+-][ \t]*"?[A-Za-z0-9_.-]+[ \t]*(==|>=|<=|~=|\^|=[ \t]*")/ { emit(); next }
+    kind == "gem" && /^[+-][ \t]*gem[ \t]/ { emit(); next }
+  ' "$2"
+}
+
+# Changes to how a repo is built, shipped or run, rather than to what it does.
+# A release that changes its own pipeline is the one most likely to surprise
+# whoever presses the button.
+# infra<TAB>org/repo<TAB>path
+facts_infra() {
+  local slug="$1" p
+  changed_files "$2" \
+    | grep -E '(^|/)(Dockerfile[^/]*|[^/]*\.dockerfile|docker-compose[^/]*\.ya?ml|compose\.ya?ml|Procfile|fly\.toml|app\.ya?ml|serverless\.ya?ml|ecosystem\.config\.[cm]?js|nginx[^/]*\.conf|Makefile|[^/]*\.tf|[^/]*\.tfvars)$|^\.github/workflows/|(^|/)(k8s|kubernetes|helm|charts|deploy|deployments|terraform)/' \
+    | while read -r p; do printf 'infra\t%s\t%s\n' "$slug" "$p"; done
 }
 
 # What merging actually does, read from the repo's own prod workflow.
@@ -495,6 +578,9 @@ pr_diff() {
 local_facts() {
   facts_env        "$1" "$2"
   facts_migrations "$1" "$2"
+  facts_ddl        "$1" "$2"
+  facts_deps       "$1" "$2"
+  facts_infra      "$1" "$2"
   facts_proto      "$1" "$2"
   facts_deeplink   "$1" "$2"
   facts_surface    "$1" "$2"
@@ -508,7 +594,7 @@ report() {
 
   roll_call "$@"
 
-  WORK="$(mktemp -d "${TMPDIR:-/tmp}/release-notes.XXXXXX")"
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/deployment-notes.XXXXXX")"
 
   for url in "$@"; do
     line="$(parse_pr "$url")"
@@ -556,7 +642,7 @@ case "$MODE" in
     NAME="${1:-}"
     [ $# -gt 0 ] && shift
     if [ -z "$NAME" ]; then
-      printf 'error\tname required: release-notes.sh %s <name> <pr-url...>\n' "$MODE"
+      printf 'error\tname required: deployment-notes.sh %s <name> <pr-url...>\n' "$MODE"
       exit 2
     fi
     # Lower-case, digits, dash and dot. Dots because release names are versions
@@ -575,8 +661,8 @@ case "$MODE" in
     if [ "$MODE" = roll-call ]; then roll_call "$@"; else report "$NAME" "$@"; fi
     ;;
   facts)
-    [ $# -eq 2 ] && [ -f "$2" ] || { printf 'error\tusage: release-notes.sh facts <org/repo> <diff-file>\n'; exit 2; }
-    WORK="$(mktemp -d "${TMPDIR:-/tmp}/release-notes.XXXXXX")"
+    [ $# -eq 2 ] && [ -f "$2" ] || { printf 'error\tusage: deployment-notes.sh facts <org/repo> <diff-file>\n'; exit 2; }
+    WORK="$(mktemp -d "${TMPDIR:-/tmp}/deployment-notes.XXXXXX")"
     local_facts "$1" "$2"
     ;;
   slash)

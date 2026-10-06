@@ -27,6 +27,11 @@
 /docs/*
 !/docs/README.md
 
+# The cross-service knowledge graph (knowledge/memory.jsonl), written by the memory
+# MCP server through knowledge-ops. It describes the private services, like docs/.
+/knowledge/*
+!/knowledge/README.md
+
 # Release runbooks: commit-level state across the private repos.
 /release/*
 !/release/README.md

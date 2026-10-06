@@ -35,13 +35,13 @@ experiment, with no stashing and no `git checkout` whiplash between them.
 │       ├── plan.md             milestone 1 (plan-m2.md, plan-m3.md follow)
 │       ├── api-contract.md     what consumers see change - read by the consumer teams
 │       ├── testing.md          RED/GREEN evidence, one section per repo
-│       ├── log.md              wrap-up, written just before the task finishes
+│       ├── log.md              /save-session's working log, then the wrap-up at finish
 │       └── <anything>          supporting files - .sql, .csv, examples, notes
 │
-├── release/                deployment runbooks, one per release
+├── release/                deployment notes, one per release
 │
 ├── .claude/
-│   ├── commands/           /plan-prd, /plan, /task, /pr, /ccs, /learn, /graph
+│   ├── commands/           /plan-prd, /plan, /task, /pr, /ccs, /learn, /graph, /deployment-notes
 │   ├── skills/             tdd-workflow, logging, ccs-conventions, the pattern skills
 │   ├── learned/            per-repo facts a skill learned - gitignored, see /learn
 │   ├── state/              which tasks are open on this machine - gitignored
@@ -188,8 +188,23 @@ See which repos are checked out at all, and what your settings resolve to:
 /task config
 ```
 
-Finish up. This writes `docs/<date>_<task>/log.md` **before** anything moves, so
-the summary is captured while the diffs are still there:
+Stop for the day, or before the context fills, and pick it up in a fresh session.
+`/save-session` writes where the task stands — next step, what failed and why,
+what was decided — into `docs/<date>_<task>/log.md`; `/resume-session` reads it
+back and briefs the new session before it touches anything:
+
+```
+/save-session
+/resume-session hotfix-payment
+```
+
+You rarely need the name: every new session starts with a short list of the open
+tasks that have a saved log, printed by the one `SessionStart` hook. It only
+informs; it cannot block a session.
+
+Finish up. This turns `docs/<date>_<task>/log.md` into the wrap-up (or writes it,
+if nothing was saved) **before** anything moves, so the summary is captured while
+the diffs are still there:
 
 ```
 /task finish hotfix-payment

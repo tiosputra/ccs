@@ -125,7 +125,7 @@ the same thing in this workspace. Everything under `.claude/` calls it a
 | Plan | `docs/<YYYY-MM-DD>_<task>/plan.md`, then `plan-m2.md`, `plan-m3.md` per later milestone |
 | API contract | `docs/<YYYY-MM-DD>_<task>/api-contract.md` — what consumers see change |
 | TDD evidence | `docs/<YYYY-MM-DD>_<task>/testing.md` — one section per repo |
-| Wrap-up log | `docs/<YYYY-MM-DD>_<task>/log.md` |
+| Log | `docs/<YYYY-MM-DD>_<task>/log.md` — working log via `/save-session` while open, wrap-up at `/task finish` |
 | Supporting files | `docs/<YYYY-MM-DD>_<task>/<name>` — anything else the task produces |
 | Pull request | one per repo in the task, branch `<prefix>/<task>` -> the source branch |
 
