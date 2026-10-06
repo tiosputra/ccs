@@ -223,7 +223,10 @@ top-level directory beside it, and never a copy inside a service repo. A command
 that starts reading a supporting file by name has made it a standard artifact:
 add it to the list, to `CLAUDE.md`, and to `/ccs`'s `check_artifacts`. The date is the day
 the task opened and never changes, so commands find a directory by globbing
-`docs/*_<task>/` and never by reconstructing its name.
+`docs/*_<task>/` and never by reconstructing its name. The one directory beside
+the task directories is `docs/_project/`, for source material the whole project
+shares (a BRD, a design handoff); `check_artifacts` skips it, and nothing a task
+produces belongs there.
 
 The one artifact that is easy to get wrong is the TDD evidence. `tdd-workflow`
 is layout-blind and writes wherever it is told; if nobody tells it, it writes

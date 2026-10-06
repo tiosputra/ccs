@@ -150,6 +150,11 @@ find the directory by globbing:
 ls -d docs/*_<task>/
 ```
 
+The one directory in `docs/` that belongs to no task is `docs/_project/`: source
+material for the whole project — the BRD, the design handoff, user flows — that
+every task reads and none owns. Read it when writing a PRD or a plan; a task that
+changes it says so in its own docs. Nothing a task produces goes there.
+
 Evidence is the one artifact that used to live inside the service repo, at
 `docs/testing/<name>.tdd.md`. It does not any more: one `testing.md` covers the
 whole task, with a section per repo, so a task spanning three services has one

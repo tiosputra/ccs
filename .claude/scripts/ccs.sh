@@ -370,11 +370,13 @@ check_artifacts() {
   # plan-m<N>.md, api-contract.md, testing.md and log.md, plus any supporting
   # file (.sql, .csv, notes). A file loose in docs/ is a stray, and so is a renamed
   # copy of a standard artifact - plan-v2.md is invisible to every command.
+  # docs/_project/ is the one exception: source material for the whole project
+  # (a BRD, a design handoff) that every task reads and none owns.
   local log d f name task bad=0 entry repo
   for entry in "$ROOT"/docs/*; do
     [ -e "$entry" ] || continue
     name="$(basename "$entry")"
-    [ "$name" = "README.md" ] && continue
+    case "$name" in README.md|_project) continue ;; esac
     if [ ! -d "$entry" ]; then
       finding med artifacts "docs/$name is a loose file - every task artifact belongs in docs/<YYYY-MM-DD>_<task>/"
       bad=$((bad + 1))
