@@ -124,3 +124,29 @@ task_holding() {
   done
   return 1
 }
+
+# task_log <task> - docs/<date>_<task>/log.md, absolute, if the task has one. The
+# date is the day the task opened and cannot be derived, so it is globbed.
+task_log() {
+  local d
+  for d in "$TL_ROOT"/docs/*_"$1"/; do
+    [ -f "${d}log.md" ] && { printf '%s
+' "${d}log.md"; return 0; }
+  done
+  return 1
+}
+
+# log_closed <log.md> - true once /task finish has written a dated Closed. An open
+# task's working log, kept by /save-session, carries `Closed: -` instead.
+log_closed() {
+  grep -Eq 'Closed[:*]* *[0-9]{4}-[0-9]{2}-[0-9]{2}' "$1"
+}
+
+# log_last_saved <log.md> - date of the newest `### YYYY-MM-DD` session entry, or
+# the file's modification date when it has none (a log written before sessions).
+log_last_saved() {
+  local last
+  last="$(grep -oE '^### [0-9]{4}-[0-9]{2}-[0-9]{2}' "$1" 2>/dev/null | sed 's/^### //' | sort | tail -n 1 || true)"
+  [ -n "$last" ] || last="$(date -r "$1" '+%Y-%m-%d' 2>/dev/null || true)"
+  printf '%s\n' "${last:--}"
+}

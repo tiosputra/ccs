@@ -129,6 +129,11 @@ building. Each server is pinned by `CRG_DATA_DIR` to the same graph `graph.sh`
 builds, and `CRG_TOOLS` trims the tool list from 30 to 6 — none of which
 write, so a server cannot build a graph into a checkout.
 
+The file also carries one server that is not a code graph: `memory`, the
+cross-service knowledge graph in `knowledge/memory.jsonl` that `knowledge-ops`
+keeps. `graph.sh` writes it on every rewrite because it owns the whole file —
+anything added to `.mcp.json` by hand is gone after the next build.
+
 What that means in practice:
 
 - They serve **`repos/<repo>` only**, from its own graph. A task's working

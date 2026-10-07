@@ -12,14 +12,15 @@
       "Bash(.claude/scripts/task.sh where *)",
       "Bash(.claude/scripts/task.sh root)",
       "Bash(.claude/scripts/task.sh report *)",
+      "Bash(.claude/scripts/task.sh logs)",
       "Bash(.claude/scripts/task.sh start *)",
       "Bash(bash -n .claude/scripts/tasklib.sh)",
       "Bash(.claude/scripts/ccs.sh:*)",
       "Bash(bash -n .claude/scripts/ccs.sh)",
       "Bash(.claude/scripts/learn.sh:*)",
       "Bash(bash -n .claude/scripts/learn.sh)",
-      "Bash(.claude/scripts/release-notes.sh:*)",
-      "Bash(bash -n .claude/scripts/release-notes.sh)",
+      "Bash(.claude/scripts/deployment-notes.sh:*)",
+      "Bash(bash -n .claude/scripts/deployment-notes.sh)",
       "Bash(.claude/scripts/graph.sh:*)",
       "Bash(bash -n .claude/scripts/graph.sh)",
       "Bash(git status:*)",
@@ -31,7 +32,23 @@
       "Bash(gh pr list:*)",
       "Bash(gh pr checks:*)",
       "Bash(gh pr diff:*)",
-      "Bash(gh auth status)"
+      "Bash(gh auth status)",
+      "mcp__memory__search_nodes",
+      "mcp__memory__open_nodes",
+      "mcp__memory__read_graph"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/scripts/session-start.sh 2>/dev/null; exit 0",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

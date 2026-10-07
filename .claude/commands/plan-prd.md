@@ -78,11 +78,12 @@ the change touches, and state the proposal in the PRD. Gate 1 is where the user 
 it. Only ask outright if the scope leaves it genuinely unclear — and then fold the question
 into the Phase 1 set rather than spending a separate turn on it.
 
-**Isolation** you propose too. In place is the default: the task works in each
-`repos/<repo>` on its branch. Propose a space (`--space`) when the invocation asked for
-one, or when `task.sh list` shows another in-place task already holding one of the repos —
-a repo takes one in-place task at a time. `task.sh config` says what this machine
-defaults to. State the choice in the PRD; Gate 1 is where the user changes it.
+**Isolation** is not yours to choose. A task works in place — in each `repos/<repo>` on
+its branch — unless the invocation said `--space`; only then does the PRD say `space`.
+Never propose a space on your own. If `task.sh list` shows another in-place task already
+holding one of the repos, or a checkout is dirty, the start will fail: say so in the PRD,
+next to the isolation, and let Gate 1 decide — finish or clean the other work, or rerun
+with `--space`.
 
 ### Phase 1 — FRAME
 
@@ -192,13 +193,13 @@ A criterion you cannot make observable is an Open Question, not a vague AC.
 | Field | Value |
 |---|---|
 | Task | `<task>` |
-| Isolation | `inplace` — each repo worked in `repos/<repo>` · or `space` — worktrees under `spaces/<task>/` |
+| Isolation | `inplace` — each repo worked in `repos/<repo>` · `space` — worktrees under `spaces/<task>/`, only when the invocation said `--space` |
 | Repos | `<repo>`, `<repo>` |
 | New branch | `<prefix>/<task>` (same name in every repo) |
 | Source branch | `origin/feature/m5.1` |
 | Working directories | filled in once started, from `task.sh where <task>` |
 | PR base | `feature/m5.1` — one PR per repo |
-| Command that will start it | `.claude/scripts/task.sh start <task> <repo>,<repo> --from origin/feature/m5.1` (plus `--space` for a space) |
+| Command that will start it | `.claude/scripts/task.sh start <task> <repo>,<repo> --from origin/feature/m5.1` (plus `--space` only if the invocation asked for it) |
 
 Say if the repos, the isolation or the source branch are wrong — this is the moment to
 change them, before any branch exists.
@@ -386,6 +387,12 @@ Now run straight through. No further permission prompts; Gate 1 covered all of t
    - Flutter or Dart (a `pubspec.yaml` at the repo root) -> `flutter-reviewer`
    - And, whatever the language, `database-reviewer` when the diff touches migrations,
      `.sql` files, or query code
+   - Anything none of these covers - CI workflows, Dockerfiles, deploy or env config,
+     shell scripts, YAML - -> `code-reviewer`
+   - And, whatever the language, `security-reviewer` when the diff touches payments or
+     balances, auth, webhooks or provider callbacks, external provider calls, crypto,
+     user input at a boundary, or a dependency manifest. In this workspace that is most
+     backend work; when in doubt, dispatch it.
 
    A repo can take more than one reviewer; dispatch them together.
 
@@ -439,9 +446,14 @@ If milestones remain, offer the next one after the PR is open.
 - `/task` — start, locate or finish a task by hand, outside this flow.
 - `/plan` — plan a later milestone of an existing PRD on its own.
 - `tdd-workflow` and the reviewer agents (`go-reviewer`, `typescript-reviewer`,
-  `react-reviewer`, `flutter-reviewer`, `database-reviewer`) — layout-blind; they are
+  `react-reviewer`, `flutter-reviewer`, `database-reviewer`, `code-reviewer`,
+  `security-reviewer`) — layout-blind; they are
   handed a working directory and a base ref, never a task name.
 - `product-lens` — before this command, when it is not yet clear the idea is worth building.
+- `dev-team`, `council` — before Gate 1, at the user's call: `dev-team` for four role
+  views that feed the PRD, `council` when the PRD has a real fork. Never between gates.
+- `santa-method` — at the user's call, on an `api-contract.md` before consumer teams
+  build against it. Code never needs it; it has the review step and Gate 2.
 - `product-capability`, `architecture-decision-records` — after Gate 1, when a multi-repo
   task's constraints or a settled trade-off need writing down; both land in the task's
   directory.

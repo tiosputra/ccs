@@ -59,7 +59,7 @@ is a new line in the script, not a new paragraph in the command.
 back to the session that spawned them. Workspace bookkeeping needs exactly the
 context the main session has — the task name, the PRD, the URL that just came
 back from `gh`. The reviewers (`go-reviewer`, `typescript-reviewer`,
-`react-reviewer`, `flutter-reviewer`, `database-reviewer`) earn their place
+`react-reviewer`, `flutter-reviewer`, `database-reviewer`, `security-reviewer`) earn their place
 because review genuinely benefits from a fresh reading of a diff.
 `tdd-guide` earns its place differently: it runs one repo's `tdd-workflow` cycle
 so a multi-repo milestone can run its repos in parallel. It carries no method of
@@ -67,7 +67,11 @@ its own — it reads the skill — and it returns its evidence rather than writi
 shared file. The build resolvers (`go-build-resolver`, `dart-build-resolver`)
 are outside the flow on purpose: a build broken mid-cycle is the implementing
 session's to fix, so they are run by hand, for a build broken by a pull or a
-branch switch. Nothing about managing the workspace benefits from an agent.
+branch switch. `code-reviewer` is the review step's fallback, for a diff no
+language reviewer covers. `planner` and `architect` are read-only and run by hand:
+a fresh, independent reading is the point, so they return a draft or a set of
+options and the session writes the plan or the ADR. Nothing about managing the
+workspace benefits from an agent.
 
 An agent imported from elsewhere is adapted before it is used, the way these
 were: it is handed one working directory and stops without one, it names the
@@ -149,6 +153,11 @@ BANG`.claude/scripts/thing.sh slash $ARGUMENTS`
 - Add the script to `settings.json` `permissions.allow` so it does not prompt,
   and reference it from at least one command — `/ccs` flags scripts nothing
   invokes.
+- **JavaScript under `scripts/` is held to the same rule.** A library imported from
+  elsewhere (`scripts/lib/*.js`, with its tests in `.claude/tests/`) counts as reached
+  only when something outside that library and its tests calls it — a chain of files
+  requiring each other, with tests that pass, is still unused. `/ccs` runs
+  `node --check` on each and flags the ones with no outside caller.
 
 ## Skills that learn: method and facts
 
@@ -201,7 +210,9 @@ project and the facts are measured once per repo instead of on every load:
 One kebab-case **task** name is reused everywhere: branch, metadata, space
 directory when it has one, PRD, plan, TDD evidence, wrap-up log. "Task",
 "space", "feature", "story", "bugfix", "hotfix" are the same thing; `.claude/`
-says **task**, and "space" means only the `--space` isolation.
+says **task**, and "space" means only the `--space` isolation. In place is the
+only default, deliberately not a setting: a task gets a space when, and only when,
+someone types `--space`.
 
 The unit of work is a task. Do not introduce a second word for it, and do not
 add a command named for a concept an existing command already owns — `/task`
@@ -235,7 +246,7 @@ split per service. Whoever invokes it passes the report path.
 
 ## Settings are per machine, and no tracked file names one
 
-Branch prefix, default base ref and default isolation differ per person. They
+Branch prefix, default base ref and reference repos differ per person. They
 resolve through `.claude/scripts/config.sh`, highest layer first:
 
 | Layer | Where | For |
@@ -299,6 +310,23 @@ If a hook is ever added again: keep its logic in its own file (a `.py`, never a
 quoted string), have the wrapper allow on any exit other than a deliberate
 block, and have `/ccs` syntax-check it.
 
+### The one hook there is: it informs, never gates
+
+`SessionStart` runs `scripts/session-start.sh`, added 2026-10-06. It prints the
+open tasks that have a saved working log (`task.sh logs`), so a new session knows
+`/resume-session` has something to load — ECC's session-start hook, kept to the one
+thing this workspace needed from it. It is shaped by everything `guard.sh` got wrong:
+
+- **Its logic is a script in `scripts/`**, so `/ccs` parses it like any other.
+- **It cannot block.** The script exits 0 on every path, and `settings.json` wraps the
+  call in `; exit 0` too. `/ccs` fails any hook whose command does not end that way.
+- **It reads facts, it does not derive them.** What counts as an open log is
+  `tasklib.sh`'s `log_closed` and `log_last_saved`, the same functions `ccs.sh`
+  uses; the hook only formats them.
+
+A new hook that would decide anything — refuse a command, rewrite an edit — is a
+gate, and the section above applies to it in full.
+
 ## Improving the system
 
 `/ccs` reports what has drifted; `/ccs note <text>` records friction in the
@@ -316,8 +344,9 @@ Two design rules the checks themselves follow, worth keeping if you add more:
 
 - **Never make a check that can only be satisfied by rewriting history.** Closed
   tasks' PRDs, plans and logs record what happened under whatever rule applied
-  then. A task counts as closed once its directory holds a `log.md`, written
-  just before the task finishes. The branch-prefix check skips those for that reason —
+  then. A task counts as closed once its `log.md` records a `Closed` date, which
+  `/task finish` writes just before the task finishes — an open task's log, kept
+  by `/save-session`, carries `Closed: —`. The branch-prefix check skips those for that reason —
   otherwise it would report the same permanent findings forever, and the only
   way to silence it would be to falsify the record.
 - **Prefer checking that a doc points at the truth over checking that it repeats

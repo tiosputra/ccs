@@ -35,13 +35,13 @@ experiment, with no stashing and no `git checkout` whiplash between them.
 │       ├── plan.md             milestone 1 (plan-m2.md, plan-m3.md follow)
 │       ├── api-contract.md     what consumers see change - read by the consumer teams
 │       ├── testing.md          RED/GREEN evidence, one section per repo
-│       ├── log.md              wrap-up, written just before the task finishes
+│       ├── log.md              /save-session's working log, then the wrap-up at finish
 │       └── <anything>          supporting files - .sql, .csv, examples, notes
 │
-├── release/                deployment runbooks, one per release
+├── release/                deployment notes, one per release
 │
 ├── .claude/
-│   ├── commands/           /plan-prd, /plan, /task, /pr, /ccs, /learn, /graph
+│   ├── commands/           /plan-prd, /plan, /task, /pr, /ccs, /learn, /graph, /deployment-notes
 │   ├── skills/             tdd-workflow, logging, ccs-conventions, the pattern skills
 │   ├── learned/            per-repo facts a skill learned - gitignored, see /learn
 │   ├── state/              which tasks are open on this machine - gitignored
@@ -146,8 +146,8 @@ exists, and you see the finished work before anything is pushed.
 
 Both kinds can be open at once. `/task start` refuses an in-place task on a repo
 that is dirty or held by another task, and says to use `--space` — it never
-changes a task's layout on its own. `TASK_DEFAULT_ISOLATION` in `.env` sets which
-one a task gets when neither flag is given.
+changes a task's layout on its own. A task is in place unless it is started
+with `--space`; no setting changes that.
 
 Nothing needs to know which one a task uses: every command asks
 `task.sh where <task> <repo>` for the directory.
@@ -188,8 +188,23 @@ See which repos are checked out at all, and what your settings resolve to:
 /task config
 ```
 
-Finish up. This writes `docs/<date>_<task>/log.md` **before** anything moves, so
-the summary is captured while the diffs are still there:
+Stop for the day, or before the context fills, and pick it up in a fresh session.
+`/save-session` writes where the task stands — next step, what failed and why,
+what was decided — into `docs/<date>_<task>/log.md`; `/resume-session` reads it
+back and briefs the new session before it touches anything:
+
+```
+/save-session
+/resume-session hotfix-payment
+```
+
+You rarely need the name: every new session starts with a short list of the open
+tasks that have a saved log, printed by the one `SessionStart` hook. It only
+informs; it cannot block a session.
+
+Finish up. This turns `docs/<date>_<task>/log.md` into the wrap-up (or writes it,
+if nothing was saved) **before** anything moves, so the summary is captured while
+the diffs are still there:
 
 ```
 /task finish hotfix-payment
@@ -263,7 +278,6 @@ Start flags:
 | `--from <ref>`       | Base ref for new branches. Default `TASK_DEFAULT_BASE`.        |
 | `--from a=x,b=y`     | Per-repo base refs, e.g. `api=origin/release-2`.               |
 | `--space`            | Work in worktrees under `spaces/<task>/`.                      |
-| `--inplace`          | Work in `repos/<repo>` itself (the default).                   |
 | `--branch <name>`    | Override the branch name (default `<prefix>/<task>`).          |
 | `--no-fetch`         | Skip `git fetch`; use whatever refs are already local.         |
 | `--no-env`           | Don't copy `.env*` files into new worktrees.                   |
@@ -303,7 +317,7 @@ changed file paths, without touching anything.
 
 ## Settings
 
-Branch prefix, default base ref and default isolation are **per machine**, not
+Branch prefix, default base ref and reference repos are **per machine**, not
 per workspace. They live in a gitignored `.env` at the root, so everyone differs
 without touching a tracked file:
 
@@ -314,7 +328,6 @@ cp .env.example .env
 ```
 TASK_BRANCH_PREFIX=<your-handle>   # branches become <your-handle>/<task>
 TASK_DEFAULT_BASE=origin/main      # base ref when --from is not given
-TASK_DEFAULT_ISOLATION=inplace     # or space
 ```
 
 Highest wins: the environment, then `.env`, then a built-in default. So a

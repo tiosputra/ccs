@@ -9,7 +9,7 @@ docs/<YYYY-MM-DD>_<task>/
 ├── plan-m2.md    one more file per later milestone: plan-m2.md, plan-m3.md, ...
 ├── api-contract.md  what consumers see change, read by the consumer teams
 ├── testing.md    the RED/GREEN evidence, one section per repo the task touched
-├── log.md        the wrap-up note, written from `task.sh report` before the task finishes
+├── log.md        /save-session's working log while open; the wrap-up at /task finish
 └── <anything>    supporting files: a backfill .sql, a .csv export, request examples
 ```
 

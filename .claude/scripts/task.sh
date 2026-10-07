@@ -10,12 +10,13 @@
 #   space     spaces/<task>/<repo>        a worktree per repo, opt in with --space
 #
 # Usage:
-#   task.sh start <task> [repos] [--from <ref>] [--space|--inplace]
+#   task.sh start <task> [repos] [--from <ref>] [--space]
 #                                [--branch <name>] [--no-fetch] [--no-env] [--dry-run]
 #   task.sh where <task> [repo]     working directory, or repo<TAB>dir per repo
 #   task.sh root                    the workspace root, absolute
 #   task.sh list [task]             open tasks and the state of each repo
 #   task.sh report <task>           facts for a wrap-up summary (read-only)
+#   task.sh logs                    each open task's working log and when it was saved
 #   task.sh repos                   the roster, read from disk
 #   task.sh config                  resolved settings and where they came from
 #   task.sh finish <task> [repos] [--delete-branch] [--force]
@@ -29,7 +30,8 @@
 #   --from  base ref for NEW branches. One ref for everything (--from
 #           origin/main) or per-repo overrides (--from api=origin/release-2,
 #           web=origin/main). Default: TASK_DEFAULT_BASE.
-#   --space / --inplace   the task's isolation. Default: TASK_DEFAULT_ISOLATION.
+#   --space the task works in worktrees. Without it the task works in place;
+#           nothing else - no setting, no busy repo - ever picks a space.
 #
 # Examples:
 #   task.sh start fix-promo api,web --from origin/feature/m5.1
@@ -49,11 +51,9 @@ DOCS_DIR="$ROOT/docs"
 . "$SCRIPT_DIR/tasklib.sh"
 cfg_resolve_renamed TASK_BRANCH_PREFIX SPACE_BRANCH_PREFIX ccs
 cfg_resolve_renamed TASK_DEFAULT_BASE SPACE_DEFAULT_BASE origin/main
-cfg_resolve TASK_DEFAULT_ISOLATION inplace
 cfg_resolve REFERENCE_REPOS ""
 BRANCH_PREFIX="$TASK_BRANCH_PREFIX"
 DEFAULT_BASE="$TASK_DEFAULT_BASE"
-DEFAULT_ISOLATION="$TASK_DEFAULT_ISOLATION"
 # Untracked-but-essential files copied from the main checkout into a new
 # worktree (git worktrees only carry tracked files).
 ENV_GLOBS=(".env" ".env.local" ".env.development" ".env.*.local")
@@ -76,7 +76,7 @@ fail() { printf '  %sx%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; }
 dim()  { printf '    %s%s%s\n' "$C_DIM" "$*" "$C_RESET"; }
 die()  { printf '%serror:%s %s\n' "$C_RED$C_BOLD" "$C_RESET" "$*" >&2; exit 1; }
 
-usage() { sed -n '3,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '3,39p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 # ----------------------------------------------------------------- repos --
 
@@ -341,7 +341,6 @@ cmd_start() {
       --branch)   branch="${2:-}"; shift 2 ;;
       --branch=*) branch="${1#*=}"; shift ;;
       --space)    isolation=space; shift ;;
-      --inplace|--in-place) isolation=inplace; shift ;;
       --no-fetch) do_fetch=0; shift ;;
       --no-env)   do_env=0; shift ;;
       --dry-run)  dry=1; shift ;;
@@ -368,8 +367,7 @@ cmd_start() {
     isolation="$have"
     [ -n "$branch" ] || branch="$(task_branch "$task")"
   fi
-  [ -n "$isolation" ] || isolation="$DEFAULT_ISOLATION"
-  case "$isolation" in inplace|space) ;; *) die "TASK_DEFAULT_ISOLATION must be inplace or space, not '$isolation'" ;; esac
+  [ -n "$isolation" ] || isolation=inplace
   [ -n "$branch" ] || branch="$BRANCH_PREFIX/$task"
 
   local repos
@@ -473,13 +471,11 @@ cmd_config() {
     "(from $(cfg_source TASK_BRANCH_PREFIX))"
   printf '  %-24s %-16s %s\n' "TASK_DEFAULT_BASE" "$DEFAULT_BASE" \
     "(from $(cfg_source TASK_DEFAULT_BASE))"
-  printf '  %-24s %-16s %s\n' "TASK_DEFAULT_ISOLATION" "$DEFAULT_ISOLATION" \
-    "(from $(cfg_source TASK_DEFAULT_ISOLATION))"
   printf '  %-24s %-16s %s\n' "REFERENCE_REPOS" "${REFERENCE_REPOS:--}" \
     "(from $(cfg_source REFERENCE_REPOS))"
   info ""
   info "  a new task would branch:   ${C_BOLD}$BRANCH_PREFIX/<task>${C_RESET}"
-  info "  and work:                  ${C_BOLD}$DEFAULT_ISOLATION${C_RESET} unless started with --space or --inplace"
+  info "  and work:                  ${C_BOLD}inplace${C_RESET} unless started with --space"
   if [ -n "$REFERENCE_REPOS" ]; then
     info "  read-only everywhere:      ${C_BOLD}${REFERENCE_REPOS}${C_RESET}"
   fi
@@ -518,6 +514,29 @@ cmd_list() {
     done
   done
   [ "$found" -eq 1 ] || info "no open tasks"
+}
+
+# ------------------------------------------------------------------ logs --
+
+# Each open task's working log: the facts /resume-session and the SessionStart
+# hook read. One row per open task, read-only:
+#   log<TAB><task><TAB><docs/.../log.md | -><TAB><last saved | -><TAB><open|closed|none>
+# none means nothing was saved yet; closed means /task finish already wrote the
+# wrap-up but the task record is still open.
+cmd_logs() {
+  local task log rel
+  for task in $(task_names); do
+    if ! log="$(task_log "$task")"; then
+      printf 'log\t%s\t-\t-\tnone\n' "$task"
+      continue
+    fi
+    rel="${log#"$ROOT"/}"
+    if log_closed "$log"; then
+      printf 'log\t%s\t%s\t%s\tclosed\n' "$task" "$rel" "$(log_last_saved "$log")"
+    else
+      printf 'log\t%s\t%s\t%s\topen\n' "$task" "$rel" "$(log_last_saved "$log")"
+    fi
+  done
 }
 
 # ---------------------------------------------------------------- report --
@@ -803,6 +822,7 @@ case "${1:-}" in
   repos)            shift; cmd_repos ;;
   config)           shift; cmd_config ;;
   report)           shift; cmd_report "$@" ;;
+  logs)             shift; cmd_logs ;;
   finish|remove|rm) shift; cmd_finish "$@" ;;
   slash)            shift; cmd_slash "$@" ;;
   *) usage; die "unknown command '$1' - use start, where, list, report, finish, repos, or config" ;;

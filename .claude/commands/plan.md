@@ -471,49 +471,62 @@ User: api,worker from origin/develop
 Assistant:
 [runs .claude/scripts/task.sh start market-resolution-notifications api,worker --from origin/develop]
 
-# Implementation Plan: Real-Time Market Resolution Notifications
+# Plan: Real-Time Market Resolution Notifications
 
 **Task**: `market-resolution-notifications` · **Isolation**: `inplace`
 **Branch**: `<prefix>/market-resolution-notifications` from `origin/develop`
+**Working directories**: `api` -> `{from task.sh where}`, `worker` -> `{from task.sh where}`
+**Base commits**: `api` `3f2a91c0d`, `worker` `b71e04a9e`
+**Source PRD**: `docs/2026-03-02_market-resolution-notifications/prd.md`
+**Selected Milestone**: 1 — in-app notifications
+**Complexity**: Medium
 
-## Requirements Restatement
-- Send notifications to users when markets they're watching resolve
-- Support multiple notification channels (in-app, email, webhook)
-- Ensure notifications are delivered reliably
-- Include market outcome and user's position result
+## Summary
+When a market resolves, the worker enqueues one notification per position holder and
+the api serves them to the in-app bell. Email and webhook channels are milestone 2.
 
-## Implementation Phases
+## Patterns to Mirror
+| Category | Source | Pattern |
+|---|---|---|
+| Migrations | `api:db/migrations/0042_add_watchlist.sql` | one table per file, indexes in the same file |
+| Queue jobs | `worker:src/jobs/settle-positions.ts:18` | idempotent job keyed by market id |
+| Tests | `worker:src/jobs/__tests__/settle-positions.test.ts` | fake queue, real SQL against the test DB |
 
-### Phase 1: Database Schema
-- Add notifications table with columns: id, user_id, market_id, type, status, created_at
-- Add user_notification_preferences table for channel preferences
-- Create indexes on user_id and market_id for performance
+## Files to Change
+| File | Action | Why |
+|---|---|---|
+| `api:db/migrations/0051_notifications.sql` | CREATE | notifications table, indexed on user_id |
+| `worker:src/jobs/notify-resolution.ts` | CREATE | enqueue one notification per holder |
+| `api:src/routes/notifications.ts` | CREATE | `GET /v1/notifications` for the bell |
 
-### Phase 2: Notification Service
-- Create notification service in `api:src/lib/notifications.ts`
-- Implement notification queue
-- Add retry logic for failed deliveries
-- Create notification templates
+## Tasks
+### Task 1: notifications table
+- **Working directory**: `api` -> `{from task.sh where}`
+- **Action**: migration plus repository functions
+- **Mirror**: `0042_add_watchlist.sql`
+- **Covers**: AC-001
+- **Validate**: `npm test -- notifications`
 
-### Phase 3: Integration Points
-- Hook into market resolution logic (when status changes to "resolved")
-- Query all users with positions in market
-- Enqueue notifications for each user
-
-### Phase 4: Frontend Components
-- Notification bell in header, notification list modal
-- Real-time updates, notification preferences page
-
-## Dependencies
-- Redis (for queue)
-- Email service
+### Task 2: enqueue on resolution
+- **Working directory**: `worker` -> `{from task.sh where}`
+- **Action**: job triggered when a market's status becomes `resolved`
+- **Mirror**: `settle-positions.ts`
+- **Covers**: AC-002, AC-003
+- **Validate**: `npm test -- notify-resolution`
 
 ## Risks
-- HIGH: Email deliverability (SPF/DKIM required)
-- MEDIUM: Performance with 1000+ users per market
-- MEDIUM: Notification spam if markets resolve frequently
+| Risk | Likelihood | Mitigation |
+|---|---|---|
+| 1000+ holders on one market | Medium | batch inserts of 500 |
+| A market resolves twice | Low | job keyed by market id, unique (user_id, market_id) |
 
-## Estimated Complexity: MEDIUM
+## Acceptance
+- [ ] Every Required acceptance criterion in this milestone is covered by a task
+- [ ] `GET /v1/notifications` is in `api-contract.md`
+
+## Handoff
+**Evidence report**: `docs/2026-03-02_market-resolution-notifications/testing.md`
+**API contract**: `docs/2026-03-02_market-resolution-notifications/api-contract.md`
 
 **WAITING FOR CONFIRMATION**: Proceed with this plan? (yes/no/modify)
 ```
@@ -527,7 +540,7 @@ Assistant:
 If you want changes, respond with:
 - "modify: [your changes]"
 - "different approach: [alternative]"
-- "skip phase 2 and do phase 3 first"
+- "do task 2 before task 1"
 
 ## Integration with Other Commands
 
@@ -539,7 +552,8 @@ The workspace chain is:
 /plan                            ->  docs/<date>_<task>/plan.md   (plan-m2.md, ... per milestone)
                                  ->  docs/<date>_<task>/api-contract.md   (when a boundary changes)
 tdd-workflow skill               ->  implementation, evidence in docs/<date>_<task>/testing.md
-/task finish <task>              ->  docs/<date>_<task>/log.md, then finish
+/save-session, /resume-session   ->  docs/<date>_<task>/log.md   (working log, between sessions)
+/task finish <task>              ->  log.md becomes the wrap-up, then finish
 ```
 
 Every artifact of a task lands in one directory, `docs/<date>_<task>/`. The date is the day

@@ -104,6 +104,7 @@ it because…", "Record this as an ADR".
 - Making a schema design choice with stated rationale
 - Choosing between architectural patterns (monolith vs services, REST vs GraphQL, sync vs events)
 - Deciding an authentication or authorization strategy
+- Selecting deployment infrastructure after weighing alternatives
 
 ## What Makes a Good ADR
 
@@ -113,6 +114,7 @@ it because…", "Record this as an ADR".
 - **Include rejected alternatives** — the next person needs to know what was considered
 - **State consequences honestly** — every decision has trade-offs
 - **Keep it short** — readable in two minutes
+- **Use present tense** — "We use X", not "We will use X"
 
 ### Don't
 - Record trivial decisions — naming and formatting do not need ADRs

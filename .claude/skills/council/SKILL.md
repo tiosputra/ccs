@@ -35,11 +35,24 @@ Examples:
 | Instead of council | Use |
 | --- | --- |
 | Verifying whether output is correct | `santa-method` |
-| Breaking a feature into implementation steps | `planner` |
+| Breaking a feature into implementation steps | `/plan` (or the `planner` agent for an independent draft) |
 | Designing system architecture | `architect` |
-| Reviewing code for bugs or security | `code-reviewer` or `santa-method` |
+| Reviewing code for bugs or security | `/plan-prd`'s review step, or `/code-review` |
 | Straight factual questions | just answer directly |
 | Obvious execution tasks | just do the task |
+
+## Where this sits in the flow
+
+A council is called by the user, at one of the two points where a decision is still
+open:
+
+- **Before Gate 1**, when the PRD has a real fork - two credible approaches and no
+  clear winner. The verdict goes into the PRD before you confirm it.
+- **At Gate 2**, for a ship-or-hold call on finished work.
+
+Between the gates, the confirmed PRD and plan are the decision; a council there
+relitigates what Gate 1 already settled. If a build turns up a genuinely new fork,
+stop and raise it with the user rather than convening a council on your own.
 
 ## Roles
 
@@ -154,14 +167,14 @@ Keep it scannable on a phone screen.
 
 ## Persistence Rule
 
-Do **not** write ad-hoc notes to `~/.claude/notes` or other shadow paths from this skill.
+Nothing is written by default, and never to a shadow path such as `~/.claude/notes`.
+When the council changes something real:
 
-If the council materially changes the recommendation:
-- use `knowledge-ops` to store the lesson in the right durable location
-- or use `/save-session` if the outcome belongs in session memory
-- or update the relevant GitHub / Linear issue directly if the decision changes active execution truth
-
-Only persist a decision when it changes something real.
+- **Inside a task** - the verdict goes where the task keeps its decisions: the PRD's
+  approach (before Gate 1), an ADR through `architecture-decision-records` when it sets
+  lasting policy, and a **Decided** entry through `/save-session`.
+- **A lesson that outlives the task** - a fact about a service or a cross-task rule -
+  goes to the memory graph through `knowledge-ops`.
 
 ## Multi-Round Follow-up
 
@@ -183,7 +196,7 @@ If the user wants another round:
 ## Related Skills
 
 - `santa-method` — adversarial verification
-- `knowledge-ops` — persist durable decision deltas correctly
+- `knowledge-ops` — persist a lesson that outlives the task in the memory graph
 - `search-first` — gather external reference material before the council if needed
 - `architecture-decision-records` — formalize the outcome when the decision becomes long-lived system policy
 
@@ -192,13 +205,13 @@ If the user wants another round:
 Question:
 
 ```text
-Should we ship ECC 2.0 as alpha now, or hold until the control-plane UI is more complete?
+Should payment v3 replace v2 for every merchant at once, or roll out behind a per-merchant flag?
 ```
 
 Likely council shape:
-- Architect pushes for structural integrity and avoiding a confused surface
-- Skeptic questions whether the UI is actually the gating factor
-- Pragmatist asks what can be shipped now without harming trust
-- Critic focuses on support burden, expectation debt, and rollout confusion
+- Architect pushes against carrying two payment paths longer than necessary
+- Skeptic questions whether per-merchant control is actually needed
+- Pragmatist asks what can ship this week without risking settlement
+- Critic focuses on mixed-state merchants, reconciliation, and rollback
 
 The value is not unanimity. The value is making the disagreement legible before choosing.

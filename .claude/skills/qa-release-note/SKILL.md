@@ -1,21 +1,22 @@
 ---
 name: qa-release-note
-description: Use when writing or reviewing a release note or deployment runbook for QA - turning a list of pull requests into plain-language statements of what should be true after the release, grouped by feature, with was/now for deliberate changes and the untested ones marked. Also read by /release-notes, which uses the per-repo facts this skill learns - who each path faces, where the app routes links, how config is read, what deploys on merge.
+description: Use when writing or reviewing the QA section of deployment notes, or any release note for QA - turning a stated set of changes - feature branches compared against their target, or pull requests - into plain-language statements of what should be true after the release, grouped by feature, with was/now for deliberate changes and the untested ones marked. Also read by /deployment-notes, which uses the per-repo facts this skill learns - who each path faces, where the app routes links, how the tests carry behaviour.
 metadata:
   origin: workspace
   learns: true
   learns-reference: true
-  fingerprint:
-    - files deploy*.yml
-    - files deploy*.yaml
 ---
 
 # QA Release Note
 
-This file is the method: how to turn pull requests into a release note a QA
+This file is the method: how to turn a release's changes into a release note a QA
 team can test from, in any project. Which paths in a repo face which audience,
-where its app routes links, how it reads configuration, what deploys when it
-merges - those are facts about one repo, so they live in its learned file.
+where its app routes links, which assertion forms its tests use - those are
+facts about one repo, so they live in its learned file.
+
+What a developer needs to ship the same release - config, migrations, deploy
+order, rollback - is the `dev-deployment-note` skill's, in the section before
+this one.
 
 ## Load the repo's facts first
 
@@ -29,28 +30,34 @@ For each repo in the release, start with its `AGENTS.md` if it has one, then:
 |---|---|
 | `fresh` | Read `.claude/learned/<repo>/qa-release-note.md` and follow it |
 | `stale` | What it watches has moved. Run `/learn qa-release-note <repo>` before relying on it |
-| `missing`, `unstamped` | Run `/learn qa-release-note <repo>` first, or say in the runbook that the repo's surfaces and deploy path were not learned |
+| `missing`, `unstamped` | Run `/learn qa-release-note <repo>` first, or say in the notes that the repo's surfaces were not learned |
 
-`/release-notes` reads the same file for its `surface` and `deeplink` records, so a
+`/deployment-notes` reads the same file for its `surface` and `deeplink` records, so a
 repo with no learned file gets neither - its absence is reported, never guessed.
 Where `AGENTS.md` and the learned file disagree, `AGENTS.md` wins.
 
 ## Where release facts come from
 
-- **Every release fact comes from `gh`**: state, size, checks, diff, file list.
-  A local checkout is only as fresh as its last fetch, and a stale one reports a
-  repo as having nothing to release, or a 22-file change against a real 51.
+- **Release facts come from the exact commits being shipped**: the feature
+  branch's tip compared against the target branch's tip, both freshly fetched,
+  diffed from their merge base - what a pull request would show, without the
+  size limit a hosted diff gives up at. Never a stale ref: a checkout only as
+  fresh as its last fetch has reported a repo as having nothing to release, or
+  a 22-file change against a real 51.
+- **Read the code on both sides, not only the diff.** The target is what runs
+  today and the feature is what will run; a hunk often only makes sense next to
+  the whole function it lands in.
 - **Architecture comes from a git ref, never a working tree** - deploy
   triggers, contract copies, a route registry. A working tree may be a task's
   branch with unmerged work; it describes that task, not the service.
-- **A release is the list of pull requests the user names.** Nothing infers it.
-  Waves routinely merge a feature branch and a handful of hotfix branches into
-  the same base on the same day.
+- **A release is the set of branches the user names**, one per service.
+  Nothing infers it. Waves routinely merge a feature branch and a handful of
+  hotfix branches into the same base on the same day.
 
 ## The test names are the QA section
 
 The team already writes the QA section, inside test names - it just never
-leaves the repo. `/release-notes` carries every added and removed assertion out
+leaves the repo. `/deployment-notes` carries every added and removed assertion out
 as a `test` record. Turn them into the release note in four moves:
 
 - **Filter** the unit-internal ones. If a QA reader could not observe it -
@@ -66,12 +73,10 @@ as a `test` record. Turn them into the release note in four moves:
 
 ## Judging the records
 
-The facts script over-reports on purpose. These calls are yours:
+The facts script over-reports on purpose. These calls are yours; the records
+about config, migrations, contracts and the deploy itself are the
+`dev-deployment-note` skill's.
 
-- **`env` - read the file path, not just the key.** A key read where the repo
-  reads service configuration (the learned file says where) belongs in the
-  deployment config. A key read by a one-off tool, a backfill or a script run by
-  hand **must not** go into the deployment config, even though it is new.
 - **`gap` - keep only user-visible behaviour.** The heuristic is per directory,
   so it flags interfaces, DTOs and registries that are covered from elsewhere.
   Keep a gap only when the file changes something someone could notice, and
@@ -84,8 +89,6 @@ The facts script over-reports on purpose. These calls are yours:
 - **`surface` - who a changed file faces.** It comes only from the learned file;
   a repo with none learned gets none, and the audience must be read off the
   handler instead.
-- **`proto` - a contract copied into other repos** changes a release task in
-  every one of them, whether or not they are in the list.
 
 ## Writing the release note
 
@@ -113,6 +116,11 @@ now:  only the person who placed the order
   what should be true, not where to click. Do not name a screen the diff cannot
   prove exists.
 - **Group by feature, never by repo.** QA does not know which service moved.
+- **Say which build each section is tested on.** Services usually ship while the
+  new app is still a beta build (TestFlight), so QA tests the beta against
+  production *and* checks the store build still behaves as before. Name the
+  build in a section's lines ("on the new build", "on the store build") and give
+  every deliberate change a store-build guard: what an installed app still does.
 - `was:` / `now:` only on deliberate changes. A bare line is something that
   should already be true and must stay true.
 - **One noun per actor, used consistently.** A change with several easily
@@ -127,11 +135,9 @@ now:  only the person who placed the order
 
 Scale check: one wave of about 110 assertions came to 12 sections.
 
-## Two runbook sections that are easy to lose
+## The previous release note
 
-- **Rollback residue** - durable side effects that survive a code rollback:
-  codes already handed out, notification rows already written, backfilled data.
-  Say explicitly what must *not* be cleaned up.
-- **The previous release note.** Read it, carry forward its unresolved watch
-  items, and flag reversals. Guidance to another team reversed four days later
-  is caught by nothing else.
+Read its QA section before writing this one. A behaviour QA was told to expect
+that this release reverses gets its own `⚠ CHANGED` entry, `was:` quoting what
+they were told - guidance to another team reversed four days later is caught by
+nothing else.
