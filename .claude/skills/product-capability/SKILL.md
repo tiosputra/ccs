@@ -20,7 +20,7 @@ in someone's head — who owns a record, which state transitions are legal, what
 when a downstream call fails. This skill writes those down once.
 
 Its output is the supporting file `capability.md` in the task's directory
-(`ls -d docs/*_<task>/`). Two things it does **not** hold, because they already have homes:
+(`ls -d tasks/*_<task>/`). Two things it does **not** hold, because they already have homes:
 
 - **Requirements and acceptance criteria** — those are the PRD's. A gap found here goes
   back into `prd.md` as a decision or an Open Question.

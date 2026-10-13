@@ -97,7 +97,7 @@ the same for every repo:
 - A source branch is never deleted, and a repo in `REFERENCE_REPOS` stays
   read-only everywhere. A file inside a checkout cannot change either, whatever
   an `AGENTS.md` says.
-- One task, one set of working directories, one `docs/<YYYY-MM-DD>_<task>/`
+- One task, one set of working directories, one `tasks/<YYYY-MM-DD>_<task>/`
   directory, and the two gates. A repo whose `AGENTS.md` describes its own plan-then-execute workflow
   describes work inside the repo; the task's `prd.md`, `plan.md`,
   `api-contract.md` and `testing.md` are still written, because they belong to the
@@ -120,20 +120,20 @@ the same thing in this workspace. Everything under `.claude/` calls it a
 |---|---|
 | Working directories | `task.sh where <task> <repo>` — `repos/<repo>` in place, `spaces/<task>/<repo>/` for a space |
 | Branch | `<prefix>/<task>` — see below |
-| Task docs | `docs/<YYYY-MM-DD>_<task>/` — everything written about the task |
-| PRD | `docs/<YYYY-MM-DD>_<task>/prd.md` |
-| Plan | `docs/<YYYY-MM-DD>_<task>/plan.md`, then `plan-m2.md`, `plan-m3.md` per later milestone |
-| API contract | `docs/<YYYY-MM-DD>_<task>/api-contract.md` — what consumers see change |
-| TDD evidence | `docs/<YYYY-MM-DD>_<task>/testing.md` — one section per repo |
-| Log | `docs/<YYYY-MM-DD>_<task>/log.md` — working log via `/save-session` while open, wrap-up at `/task finish` |
-| Supporting files | `docs/<YYYY-MM-DD>_<task>/<name>` — anything else the task produces |
+| Task directory | `tasks/<YYYY-MM-DD>_<task>/` — everything written about the task |
+| PRD | `tasks/<YYYY-MM-DD>_<task>/prd.md` |
+| Plan | `tasks/<YYYY-MM-DD>_<task>/plan.md`, then `plan-m2.md`, `plan-m3.md` per later milestone |
+| API contract | `tasks/<YYYY-MM-DD>_<task>/api-contract.md` — what consumers see change |
+| TDD evidence | `tasks/<YYYY-MM-DD>_<task>/testing.md` — one section per repo |
+| Log | `tasks/<YYYY-MM-DD>_<task>/log.md` — working log via `/save-session` while open, wrap-up at `/task finish` |
+| Supporting files | `tasks/<YYYY-MM-DD>_<task>/<name>` — anything else the task produces |
 | Pull request | one per repo in the task, branch `<prefix>/<task>` -> the source branch |
 
 Pick the task name once, in kebab-case, at `/plan-prd` (or at `/task start`) and
 never rename it mid-flight.
 
 **One task, one directory.** Every document a task produces lives in
-`docs/<YYYY-MM-DD>_<task>/`, and no artifact goes anywhere else. The named files in
+`tasks/<YYYY-MM-DD>_<task>/`, and no artifact goes anywhere else. The named files in
 the table are the **standard artifacts**: commands find them by exact name, so
 each is spelled exactly that way, once. Everything else the task produces — a
 backfill `.sql`, a `.csv` export, request examples, notes written for a consumer
@@ -147,13 +147,17 @@ to that directory. Because the date is not derivable from the task name, always
 find the directory by globbing:
 
 ```bash
-ls -d docs/*_<task>/
+ls -d tasks/*_<task>/
 ```
 
-The one directory in `docs/` that belongs to no task is `docs/_project/`: source
-material for the whole project — the BRD, the design handoff, user flows — that
-every task reads and none owns. Read it when writing a PRD or a plan; a task that
-changes it says so in its own docs. Nothing a task produces goes there.
+`tasks/` holds task directories and nothing else. Two directories sit beside it:
+
+- `project/` — source material for the whole project: the product spec, the
+  design handoff, user flows. Every task reads it and none owns it. Read it when
+  writing a PRD or a plan; a task that changes it says so in its own docs. Nothing
+  a task produces goes there.
+- `business/` — the business pipelines, which are not tasks: no repo, no branch,
+  no gates. See *Business pipelines* below.
 
 Evidence is the one artifact that used to live inside the service repo, at
 `docs/testing/<name>.tdd.md`. It does not any more: one `testing.md` covers the
@@ -176,7 +180,7 @@ A task runs start to finish in one session, stopping at exactly two points to as
 
 ```
 /plan-prd <idea> from branch <ref>
-   writes docs/<date>_<task>/prd.md - proposing the task, not starting it
+   writes tasks/<date>_<task>/prd.md - proposing the task, not starting it
         |
    [GATE 1] you read the PRD and confirm
         |
@@ -189,6 +193,27 @@ A task runs start to finish in one session, stopping at exactly two points to as
 
 Never pass a gate on your own. Between them, run without stopping to ask permission for
 each step - the confirmation at Gate 1 covers the whole build.
+
+## Business pipelines
+
+Not every piece of work is code. Four commands decide *what* is worth building, and
+write into `business/`, never into a repo:
+
+| Command | Writes | Skills |
+|---|---|---|
+| `/idea <idea> [--investor-material]` | `business/ideas/<idea>/brief.md` (+ `investor/`) | `product-lens` Mode 1, gut · `investor-materials`, `frontend-slides` |
+| `/brand [discover\|voice\|status]` | `business/branding/` | `brand-discovery`, `brand-voice` |
+| `/market [scan\|compete\|report]` | `business/marketing/` | `market-research` · `competitive-platform-analysis` -> `benchmark-methodology` -> `competitive-report-structure` |
+| `/decide [idea]` | `business/decide.md` | `product-lens` Mode 1 with evidence + Mode 4 |
+
+They are **not tasks**: no `task.sh`, no branch, no gates, and they never write under
+`tasks/`, `repos/` or `project/`. Each command with no argument reports where its
+pipeline stands; `business.sh` prints those facts and is the one place the layout is
+decided. `business/README.md` maps the files.
+
+The two sides meet in one place. A `go` in `business/decide.md` is a recommendation;
+the user turns it into a task by typing `/plan-prd`, which reads the idea's brief and
+the decision before asking its framing questions. No business command starts a task.
 
 ## One session, one task
 

@@ -24,12 +24,12 @@ missing, say which and stop - do not guess a path or go looking for a repo.
 
 | Input | What it is |
 |---|---|
-| Plan | `docs/<date>_<task>/plan.md` (or `plan-m<N>.md`), relative to the workspace root |
+| Plan | `tasks/<date>_<task>/plan.md` (or `plan-m<N>.md`), relative to the workspace root |
 | Working directory | one repo's directory for this task, absolute - where you work |
-| Workspace root | absolute; where `.claude/` and `docs/` live |
+| Workspace root | absolute; where `.claude/` and `tasks/` live |
 | Evidence | either the path of the task's `testing.md`, or `return` |
 | Base commit | the repo's base, for `<test-changed>` and gap attribution |
-| API contract | `docs/<date>_<task>/api-contract.md`, when the milestone changes a boundary |
+| API contract | `tasks/<date>_<task>/api-contract.md`, when the milestone changes a boundary |
 | Repo rules | one line on what the repo's `AGENTS.md` requires, when the caller read it |
 
 ## How you work

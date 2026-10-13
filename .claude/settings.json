@@ -23,6 +23,8 @@
       "Bash(bash -n .claude/scripts/deployment-notes.sh)",
       "Bash(.claude/scripts/graph.sh:*)",
       "Bash(bash -n .claude/scripts/graph.sh)",
+      "Bash(.claude/scripts/business.sh:*)",
+      "Bash(bash -n .claude/scripts/business.sh)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",

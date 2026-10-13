@@ -38,7 +38,7 @@ finding() { printf 'finding\t%s\t%s\t%s\n' "$1" "$2" "$3"; }
 ok()      { printf 'ok\t%s\t%s\n' "$1" "$2"; }
 
 # Prose files that are supposed to describe the workspace to a reader.
-DOCS="$ROOT/README.md $ROOT/CLAUDE.md $CLAUDE_DIR/commands/task.md"
+DOCS="$ROOT/README.md $ROOT/USAGE.md $ROOT/CLAUDE.md $CLAUDE_DIR/commands/task.md"
 
 # Repo directory names, read from disk - the same rule task.sh uses.
 all_repo_names() {
@@ -67,7 +67,7 @@ check_repos() {
   # A doc naming repos/<something> that is not on disk: a stale example, or a
   # service that was removed and left a dangling reference behind.
   for name in $(grep -rhoE 'repos/[a-z][a-z0-9-]*' \
-                  "$ROOT/README.md" "$ROOT/CLAUDE.md" "$CLAUDE_DIR"/commands/*.md \
+                  "$ROOT/README.md" "$ROOT/USAGE.md" "$ROOT/CLAUDE.md" "$CLAUDE_DIR"/commands/*.md \
                   "$CLAUDE_DIR"/skills/*/SKILL.md 2>/dev/null \
                 | sed 's|repos/||' | sort -u); do
     case "$name" in readme|README) continue;; esac
@@ -180,7 +180,10 @@ check_skills() {
 #
 # ccs-conventions is skipped here as it is there: it documents the guard, and
 # its examples use the same aliases as guard-test.sh's fixture (`mobile`,
-# `partner`), which any machine may also have checked out.
+# `partner`), which any machine may also have checked out. knowledge-ops is
+# skipped for the same kind of reason: its entity types (`service`, `table`,
+# `event`, ...) are graph vocabulary and its examples are made-up aliases
+# (`orders`), so a repo that happens to share one of those words is not named.
 known_repo_names() {
   local d
   { all_repo_names
@@ -193,7 +196,7 @@ check_skill_facts() {
   for name in $(known_repo_names); do
     for f in "$CLAUDE_DIR"/skills/*/*.md "$CLAUDE_DIR"/agents/*.md; do
       [ -f "$f" ] || continue
-      case "$f" in */skills/ccs-conventions/*) continue ;; esac
+      case "$f" in */skills/ccs-conventions/*|*/skills/knowledge-ops/*) continue ;; esac
       hits="$(grep -cE "$bt$name($bt|/)" "$f" 2>/dev/null)"
       [ -n "$hits" ] || hits=0
       if [ "$hits" -gt 0 ]; then
@@ -258,7 +261,7 @@ check_agents() {
 check_docs_commands() {
   local c bad=0
   for c in $(grep -rhoE '(^|[ `(])/[a-z][a-z0-9-]{2,}' \
-               "$ROOT/README.md" "$ROOT/CLAUDE.md" "$CLAUDE_DIR"/commands/*.md \
+               "$ROOT/README.md" "$ROOT/USAGE.md" "$ROOT/CLAUDE.md" "$CLAUDE_DIR"/commands/*.md \
                "$CLAUDE_DIR"/skills/*/SKILL.md 2>/dev/null \
              | tr -d ' `(' | sed 's|^/||' | sort -u); do
     [ -f "$CLAUDE_DIR/commands/$c.md" ] && continue
@@ -268,7 +271,7 @@ check_docs_commands() {
       space)
         finding high commands "docs reference /space, which /task replaced - start, list and finish tasks with /task"
         bad=$((bad + 1)); continue ;;
-      task|plan|plan-prd|pr|ccs|learn|graph) ;;
+      task|plan|plan-prd|pr|ccs|learn|graph|idea|brand|market|decide) ;;
       *) continue ;;
     esac
     finding high commands "docs reference /$c but .claude/commands/$c.md does not exist"
@@ -306,6 +309,23 @@ EOF
   [ "$bad" -eq 0 ] && ok settings "valid, every script it names exists, every hook fails open"
 }
 
+# USAGE.md is the one page that lists every command for a newcomer, so unlike
+# the other docs it is meant to repeat the truth rather than point at it. What
+# can drift is the list: a command added under .claude/commands/ and never
+# written up is invisible to anyone reading the guide. The other checks scan it
+# like README.md - command names, branch prefixes, repo names.
+check_usage() {
+  local f="$ROOT/USAGE.md" c bad=0 n=0
+  [ -f "$f" ] || { finding med docs "USAGE.md is missing - README.md sends newcomers to it for the command list"; return 0; }
+  for c in "$CLAUDE_DIR"/commands/*.md; do
+    [ -f "$c" ] || continue
+    c="$(basename "$c" .md)"; n=$((n + 1))
+    grep -qE "(^|[^a-z0-9-])/$c([^a-z0-9-]|\$)" "$f" \
+      || { finding med docs "/$c is a command but USAGE.md never mentions it - add it to the guide"; bad=$((bad + 1)); }
+  done
+  [ "$bad" -eq 0 ] && ok docs "USAGE.md covers every command ($n)"
+}
+
 check_config() {
   # Per-machine settings live in a gitignored .env. The check is not "is the
   # prefix ccs" - there is no right value any more - it is whether the
@@ -333,12 +353,12 @@ check_doc_prefix() {
   # No tracked file may name a branch prefix: it differs per machine, so a
   # literal is wrong for everyone but its author. Docs write <prefix>/<task>.
   local f hit bad=0
-  for f in "$ROOT/CLAUDE.md" "$ROOT/README.md" "$CLAUDE_DIR"/commands/*.md \
+  for f in "$ROOT/CLAUDE.md" "$ROOT/README.md" "$ROOT/USAGE.md" "$CLAUDE_DIR"/commands/*.md \
            "$CLAUDE_DIR"/skills/*/SKILL.md; do
     [ -f "$f" ] || continue
     for hit in $(grep -ohE '[a-z][a-z0-9-]*/<task>' "$f" 2>/dev/null | sort -u); do
       case "${hit%%/*}" in
-        spaces|tasks|repos|docs|release|testing) continue ;;
+        spaces|tasks|repos|docs|project|business|release|testing) continue ;;
       esac
       finding med docs "${f#$ROOT/} hardcodes '$hit' - the prefix is per machine, write '<prefix>/<task>'"
       bad=$((bad + 1))
@@ -354,7 +374,7 @@ check_branch_prefix() {
   # its log.md records a Closed date - /task finish writes it just before
   # teardown. A log without one is /save-session's working log of an open task.
   local d f task pfx bad=0
-  for d in "$ROOT"/docs/*_*/; do
+  for d in "$ROOT"/tasks/*_*/; do
     [ -d "$d" ] || continue
     [ -f "$d/log.md" ] && log_closed "$d/log.md" && continue
     task="$(basename "$d")"; task="${task#*_}"
@@ -370,7 +390,7 @@ check_branch_prefix() {
         # The .claude/ subdirectories are here for the same reason - machinery
         # work is named after the artifact it builds, so a PRD for a command
         # called X legitimately writes commands/X and scripts/X.
-        case "$pfx" in origin|refs|remotes|spaces|tasks|repos|docs|testing|release|commands|scripts|skills|agents) continue;; esac
+        case "$pfx" in origin|refs|remotes|spaces|tasks|repos|docs|project|business|testing|release|commands|scripts|skills|agents) continue;; esac
         if [ "$pfx" != "$BRANCH_PREFIX" ]; then
           finding med branch "${f#$ROOT/} names the branch '$pfx/$task', but this machine resolves '$BRANCH_PREFIX/' - a PRD should say '<prefix>/<task>'"
           bad=$((bad + 1))
@@ -387,7 +407,7 @@ check_legacy_branches() {
   # user's to rename or delete - some carry commits that exist on no remote -
   # so they are reported, never touched.
   local tasks task repo ref pfx bad=0
-  tasks="$( { ls -d "$ROOT"/docs/*_*/ 2>/dev/null || true; } \
+  tasks="$( { ls -d "$ROOT"/tasks/*_*/ 2>/dev/null || true; } \
             | sed -e 's|/$||' -e 's|.*/||' -e 's|^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}_||' \
             | sort -u)"
   for repo in $(all_repo_names); do
@@ -407,25 +427,31 @@ EOF
 }
 
 check_artifacts() {
-  # One task, one directory: docs/<YYYY-MM-DD>_<task>/ holding prd.md, plan.md,
+  # One task, one directory: tasks/<YYYY-MM-DD>_<task>/ holding prd.md, plan.md,
   # plan-m<N>.md, api-contract.md, testing.md and log.md, plus any supporting
-  # file (.sql, .csv, notes). A file loose in docs/ is a stray, and so is a renamed
+  # file (.sql, .csv, notes). A file loose in tasks/ is a stray, and so is a renamed
   # copy of a standard artifact - plan-v2.md is invisible to every command.
-  # docs/_project/ is the one exception: source material for the whole project
-  # (a BRD, a design handoff) that every task reads and none owns.
+  # Source material the whole project shares lives beside tasks/, in project/.
   local log d f name task bad=0 entry repo
-  for entry in "$ROOT"/docs/*; do
+  # tasks/ was called docs/ until 2026-10-13, with the project's source material
+  # in docs/_project/. A machine that pulled the rename still has the old layout,
+  # and every command now looks in tasks/ - so its task logs read as missing.
+  if [ -d "$ROOT/docs" ]; then
+    finding high artifacts "docs/ still exists - task directories moved to tasks/ and docs/_project/ to project/; move them (mv docs/_project project; mv docs tasks) or no command finds them"
+    bad=$((bad + 1))
+  fi
+  for entry in "$ROOT"/tasks/*; do
     [ -e "$entry" ] || continue
     name="$(basename "$entry")"
-    case "$name" in README.md|_project) continue ;; esac
+    case "$name" in README.md) continue ;; esac
     if [ ! -d "$entry" ]; then
-      finding med artifacts "docs/$name is a loose file - every task artifact belongs in docs/<YYYY-MM-DD>_<task>/"
+      finding med artifacts "tasks/$name is a loose file - every task artifact belongs in tasks/<YYYY-MM-DD>_<task>/"
       bad=$((bad + 1))
       continue
     fi
     case "$name" in
       [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_?*) ;;
-      *) finding med artifacts "docs/$name is not named <YYYY-MM-DD>_<task> - the date is the day the task opened"
+      *) finding med artifacts "tasks/$name is not named <YYYY-MM-DD>_<task> - the date is the day the task opened"
          bad=$((bad + 1)); continue ;;
     esac
     for f in "$entry"/*; do
@@ -435,20 +461,20 @@ check_artifacts() {
         plan-m[0-9]*.md)
           # plan-m2.md yes, plan-m2-old.md no.
           basename "$f" | grep -qE '^plan-m[0-9]+\.md$' || {
-            finding med artifacts "docs/$name/$(basename "$f") looks like a renamed plan - commands only read plan.md and plan-m<N>.md"
+            finding med artifacts "tasks/$name/$(basename "$f") looks like a renamed plan - commands only read plan.md and plan-m<N>.md"
             bad=$((bad + 1)); } ;;
         prd[-_.]*|plan[-_.]*|testing[-_.]*|api-contract[-_.]*|log[-_.]*)
-          finding med artifacts "docs/$name/$(basename "$f") looks like a renamed copy of a standard artifact - commands read only the exact name, so revise that file instead"
+          finding med artifacts "tasks/$name/$(basename "$f") looks like a renamed copy of a standard artifact - commands read only the exact name, so revise that file instead"
           bad=$((bad + 1)) ;;
         *) ;;  # a supporting file
       esac
     done
   done
-  for log in "$ROOT"/docs/*_*/log.md; do
+  for log in "$ROOT"/tasks/*_*/log.md; do
     [ -f "$log" ] || continue
     d="$(dirname "$log")"; name="$(basename "$d")"; task="${name#*_}"
     if [ ! -f "$d/prd.md" ]; then
-      finding low artifacts "docs/$name/log.md has no prd.md - '$task' ran outside the documented flow"
+      finding low artifacts "tasks/$name/log.md has no prd.md - '$task' ran outside the documented flow"
       bad=$((bad + 1))
     fi
   done
@@ -480,7 +506,52 @@ check_artifacts() {
       fi
     done
   done
-  [ "$bad" -eq 0 ] && ok artifacts "every task doc sits in docs/<date>_<task>/ under a standard or supporting name, logs trace back to PRDs, no orphan tasks"
+  [ "$bad" -eq 0 ] && ok artifacts "every task doc sits in tasks/<date>_<task>/ under a standard or supporting name, logs trace back to PRDs, no orphan tasks"
+}
+
+check_business() {
+  # The business pipelines find their files by name, the way task commands find
+  # prd.md: business.sh prints them, /decide reads them. So the names are
+  # standard artifacts, and a renamed copy (brief-v2.md, scan-old.md) or a file
+  # outside the layout is invisible to every command. business/README.md maps it.
+  local B="$ROOT/business" entry name f bad=0
+  [ -d "$B" ] || { ok business "no business pipeline has run yet"; return 0; }
+  for entry in "$B"/*; do
+    [ -e "$entry" ] || continue
+    name="$(basename "$entry")"
+    case "$name" in
+      README.md|ideas|branding|marketing|decide.md) ;;
+      decide[-_.]*) finding med business "business/$name looks like a renamed copy of decide.md - /decide keeps its history inside that file"
+                    bad=$((bad + 1)) ;;
+      *) finding med business "business/$name is outside the layout - ideas/, branding/, marketing/ and decide.md are all a command reads"
+         bad=$((bad + 1)) ;;
+    esac
+  done
+  for entry in "$B"/ideas/*; do
+    [ -e "$entry" ] || continue
+    name="$(basename "$entry")"
+    if [ ! -d "$entry" ] || ! printf '%s' "$name" | grep -qE '^[a-z0-9]+(-[a-z0-9]+)*$'; then
+      finding med business "business/ideas/$name is not a kebab-case idea directory - /idea writes ideas/<idea>/brief.md"
+      bad=$((bad + 1)); continue
+    fi
+    [ -f "$entry/brief.md" ] || { finding low business "business/ideas/$name has no brief.md - /decide has nothing to judge it on"; bad=$((bad + 1)); }
+    for f in "$entry"/brief[-_.]*; do
+      [ -e "$f" ] && [ "$(basename "$f")" != brief.md ] || continue
+      finding med business "business/ideas/$name/$(basename "$f") looks like a renamed brief - /idea revises brief.md in place"
+      bad=$((bad + 1))
+    done
+  done
+  for f in "$B"/branding/* "$B"/marketing/*; do
+    [ -e "$f" ] || continue
+    name="${f#"$B"/}"
+    case "$name" in
+      branding/state.json|branding/modules|branding/founders|branding/voice.md) ;;
+      marketing/scan.md|marketing/compete|marketing/brief.md) ;;
+      *) finding med business "business/$name is outside the layout - business/README.md lists what /brand and /market write"
+         bad=$((bad + 1)) ;;
+    esac
+  done
+  [ "$bad" -eq 0 ] && ok business "business/ holds only what /idea, /brand, /market and /decide write, under their fixed names"
 }
 
 check_notes() {
@@ -508,11 +579,13 @@ cmd_check() {
   check_agents
   check_settings
   check_docs_commands
+  check_usage
   check_config
   check_doc_prefix
   check_branch_prefix
   check_legacy_branches
   check_artifacts
+  check_business
   check_notes
 }
 

@@ -105,13 +105,13 @@ once, then read what is in it — it is the PR body's source material, and far b
 inferring intent from a diff:
 
 ```bash
-ls -d docs/*_<task>/          # the date prefix is the day the task opened
+ls -d tasks/*_<task>/          # the date prefix is the day the task opened
 ```
 
-- `docs/<date>_<task>/prd.md` — the problem, hypothesis, and milestone
-- `docs/<date>_<task>/plan.md` (or `plan-m<N>.md`) — what was actually built
-- `docs/<date>_<task>/testing.md` — the RED/GREEN evidence, one section per repo
-- `docs/<date>_<task>/api-contract.md` — what consumers see change, if the task changed a boundary
+- `tasks/<date>_<task>/prd.md` — the problem, hypothesis, and milestone
+- `tasks/<date>_<task>/plan.md` (or `plan-m<N>.md`) — what was actually built
+- `tasks/<date>_<task>/testing.md` — the RED/GREEN evidence, one section per repo
+- `tasks/<date>_<task>/api-contract.md` — what consumers see change, if the task changed a boundary
 
 These are workspace files, not repo files: read them from the workspace root, never from
 inside the working directory, and never stage them. The evidence in particular **does not travel
@@ -146,7 +146,7 @@ the file list:
 <why it changed — the PRD's problem statement in a sentence or two>
 
 Task: <task>
-Plan: docs/<date>_<task>/plan.md
+Plan: tasks/<date>_<task>/plan.md
 ```
 
 `<type>` is `feat`, `fix`, `refactor`, `test`, `docs`, or `chore`. `<scope>` is the area
@@ -196,14 +196,14 @@ belong to exactly one of them. **Nothing below ever appears in a PR body:**
 
 ```
 Task: <task>                        <- commit trailer
-Plan: docs/<date>_<task>/plan.md    <- commit trailer
+Plan: tasks/<date>_<task>/plan.md    <- commit trailer
 Co-Authored-By: ...                 <- commit trailer, if any
 Claude-Session: https://...         <- commit trailer, if any
 🤖 Generated with ...               <- never, in either
 ```
 
 Those lines are bookkeeping for the workspace, and half of them point at paths no
-reviewer can open — `docs/<date>_<task>/` is workspace-local and is not in the repo.
+reviewer can open — `tasks/<date>_<task>/` is workspace-local and is not in the repo.
 A PR body ends with its last real section; it gets no trailer block and no footer.
 
 Build the body from the sections below and from the planning artifacts. Never build
@@ -248,7 +248,7 @@ section entirely when the PR changes nothing a consumer can observe.>
 
 ## Related
 
-- Task docs: `docs/<date>_<task>/` — PRD, plan, contract, and evidence (workspace-local)
+- Task docs: `tasks/<date>_<task>/` — PRD, plan, contract, and evidence (workspace-local)
 - Milestone <N>
 - <sibling PRs in this task, if any>
 ```

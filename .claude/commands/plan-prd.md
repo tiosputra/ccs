@@ -56,8 +56,8 @@ Derive a kebab-case `<task>` name from the idea (short, 2–4 words: `offline-sy
 
 ```bash
 .claude/scripts/task.sh list
-ls -d docs/*/ 2>/dev/null
-ls -d docs/*_<task>/ 2>/dev/null   # this task's directory, whatever day it opened
+ls -d tasks/*/ 2>/dev/null
+ls -d tasks/*_<task>/ 2>/dev/null   # this task's directory, whatever day it opened
 ```
 
 - If a task named `<task>` is already open, reuse it — do not start a second one, do not
@@ -86,6 +86,15 @@ next to the isolation, and let Gate 1 decide — finish or clean the other work,
 with `--space`.
 
 ### Phase 1 — FRAME
+
+**An idea that came through the business pipelines** has a brief already. Check with
+`.claude/scripts/business.sh ideas`; if one matches, read its
+`business/ideas/<idea>/brief.md`, and `business/decide.md` when it exists. Their
+who, pain and why-now answer this phase's questions - restate them and ask only what
+they left as assumptions; their evidence and citations feed GROUND. A `no-go` or
+`not yet` in `decide.md` is said back to the user before anything else, and the PRD
+proceeds only if they confirm. The task name may differ from the idea name; say which
+idea it came from in the PRD's Evidence.
 
 If `$ARGUMENTS` is empty, ask:
 
@@ -155,12 +164,12 @@ settle it before any branch exists.
 
 ```bash
 date +%F                              # never guess or reuse a date from memory
-mkdir -p docs/<YYYY-MM-DD>_<task>
+mkdir -p tasks/<YYYY-MM-DD>_<task>
 ```
 
-**Output path**: `docs/<YYYY-MM-DD>_<task>/prd.md`, where the date is today's `date +%F`
+**Output path**: `tasks/<YYYY-MM-DD>_<task>/prd.md`, where the date is today's `date +%F`
 and `<task>` is the kebab-case task name — e.g.
-`docs/2026-08-28_offline-sync/prd.md`. This directory is where every later artifact of the
+`tasks/2026-08-28_offline-sync/prd.md`. This directory is where every later artifact of the
 task goes too: `plan.md`, `api-contract.md`, `testing.md`, `log.md`. Creating it is the one write this phase
 makes; no task, no branch, no code.
 
@@ -169,7 +178,7 @@ A PRD edited later keeps its directory; only the *Last updated* line moves. Neve
 the directory — the plans, the evidence, the log and the PR all point into it.
 
 Because the date prefix is not derivable from the task name, always **glob** for an
-existing directory (`ls -d docs/*_<task>/`) rather than guessing the path.
+existing directory (`ls -d tasks/*_<task>/`) rather than guessing the path.
 
 Both dates come from `date +%F` in `YYYY-MM-DD`. *Created* is written once and never
 changes; *Last updated* is bumped every time the file is edited afterwards — at Gate 1
@@ -270,7 +279,7 @@ Report, then **stop**. Do not start the task. Do not write code. The user asked 
 pause so they can open the file and read it.
 
 ```
-PRD written: docs/<YYYY-MM-DD>_<task>/prd.md
+PRD written: tasks/<YYYY-MM-DD>_<task>/prd.md
 
 Proposed task
   Task       <task>
@@ -331,7 +340,7 @@ Now run straight through. No further permission prompts; Gate 1 covered all of t
    (`CLAUDE.md`). Read them now, before the plan is written, so the plan is already
    shaped by them — not after the code is, when the fix is a rewrite. They do not
    change where the work happens: the task's working directories, the two gates, and
-   its documents in `docs/<YYYY-MM-DD>_<task>/` are this workspace's, and stay.
+   its documents in `tasks/<YYYY-MM-DD>_<task>/` are this workspace's, and stay.
 
 3. **Plan the next pending milestone** — follow `/plan`'s PRD artifact mode. Write the plan
    beside the PRD, in the same directory: `plan.md` for milestone 1, `plan-m<N>.md` after
@@ -347,8 +356,8 @@ Now run straight through. No further permission prompts; Gate 1 covered all of t
 
 4. **Implement it** with the `tdd-workflow` skill, once per repo the milestone touches.
    Hand it four things: the plan path, the working directory `task.sh where <task> <repo>`
-   printed, the evidence report path `docs/<YYYY-MM-DD>_<task>/testing.md`, and the API
-   contract `docs/<YYYY-MM-DD>_<task>/api-contract.md` when the milestone wrote one. The skill
+   printed, the evidence report path `tasks/<YYYY-MM-DD>_<task>/testing.md`, and the API
+   contract `tasks/<YYYY-MM-DD>_<task>/api-contract.md` when the milestone wrote one. The skill
    is layout-blind — give it directories and paths, never a task name — and it writes its evidence wherever
    it is told, so passing that path is what keeps the whole task's evidence in one file
    instead of scattering a copy into each service repo. Every repo appends its own
@@ -411,9 +420,9 @@ Done: <task> — milestone {N}, {milestone name}
   {repo}   {n} files changed   tests {pass/total}   review {clean | n findings}
   {repo}   {n} files changed   tests {pass/total}   review {clean | n findings}
 
-Evidence:  docs/<date>_<task>/testing.md   ({n} repo sections)
-Plan:      docs/<date>_<task>/plan.md      (plan-m{N}.md for a later milestone)
-Contract:  docs/<date>_<task>/api-contract.md   ({n} changes, {n} breaking — or "none")
+Evidence:  tasks/<date>_<task>/testing.md   ({n} repo sections)
+Plan:      tasks/<date>_<task>/plan.md      (plan-m{N}.md for a later milestone)
+Contract:  tasks/<date>_<task>/api-contract.md   ({n} changes, {n} breaking — or "none")
 Uncommitted in: {workdir per repo, from task.sh where <task>}   (nothing committed yet)
 
 Review findings left open:
@@ -435,7 +444,7 @@ If milestones remain, offer the next one after the PR is open.
 
 ```
 /plan-prd <idea> from branch <ref>
-      |         writes docs/<date>_<task>/prd.md   <- nothing else created yet
+      |         writes tasks/<date>_<task>/prd.md   <- nothing else created yet
    [GATE 1]     you read it and confirm
       |         task.sh start -> /plan (+ api-contract.md) -> tdd-workflow -> reviewer agents
    [GATE 2]     you confirm it is ready
@@ -470,8 +479,8 @@ If milestones remain, offer the next one after the PR is open.
 - **SCOPE_BOUNDED**: explicit MVP and explicit out-of-scope.
 - **QUESTIONS_ASKED_NOT_PARKED**: every uncertainty the user could answer was asked in the terminal before the PRD was written; Open Questions holds only what needs data, a spike, or a third party — each with the method that settles it.
 - **CONTRACT_BEFORE_IMPLEMENTATION**: a milestone that changes an endpoint, a response field, a socket event, or an error a consumer branches on has `api-contract.md` written before the implementation, not after — and a milestone that changes no boundary says so rather than leaving it ambiguous.
-- **ONE_TASK_ONE_DIRECTORY**: every artifact of the task — PRD, plans, API contract, evidence, log — is written inside `docs/<YYYY-MM-DD>_<task>/`, and nothing of this task is written anywhere else.
-- **PRD_DIRECTORY_DATED**: the directory is `docs/<YYYY-MM-DD>_<task>/` with the date from `date +%F`; an existing one is found by globbing `docs/*_<task>/`, never by guessing a date, and never re-dated.
+- **ONE_TASK_ONE_DIRECTORY**: every artifact of the task — PRD, plans, API contract, evidence, log — is written inside `tasks/<YYYY-MM-DD>_<task>/`, and nothing of this task is written anywhere else.
+- **PRD_DIRECTORY_DATED**: the directory is `tasks/<YYYY-MM-DD>_<task>/` with the date from `date +%F`; an existing one is found by globbing `tasks/*_<task>/`, never by guessing a date, and never re-dated.
 - **PRD_DATED**: the PRD carries *Created* and *Last updated* dates in `YYYY-MM-DD`, taken from `date +%F`, and *Last updated* is bumped on every later edit.
 - **WORKDIRS_FROM_TASK_SH**: every working directory in the PRD is one `task.sh where` printed, never a path built by hand.
 - **NOTHING_COMMITTED_BEFORE_GATE_2**: the build leaves work uncommitted; `/pr` commits it.

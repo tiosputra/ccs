@@ -74,7 +74,7 @@ If the topic is vague, ask one clarifying question before starting.
 The context comes from the task, not from a project-wide file. Read, with the
 harness's file tools:
 
-- the task's PRD, when one exists (`ls -d docs/*_<task>/`, then `prd.md`)
+- the task's PRD, when one exists (`ls -d tasks/*_<task>/`, then `prd.md`)
 - the `AGENTS.md` of each repo the topic touches, in that repo's working directory
   (`.claude/scripts/task.sh where <task> <repo>`), when it has one
 
@@ -177,7 +177,7 @@ After presenting, offer:
 
 Do not write session output to files by default. When the user asks to keep it, it
 belongs to the task: fold what changes the PRD into `prd.md`, or keep the whole session
-as a supporting file, `docs/<YYYY-MM-DD>_<task>/dev-team-<slug>.md`. With no task yet,
+as a supporting file, `tasks/<YYYY-MM-DD>_<task>/dev-team-<slug>.md`. With no task yet,
 show it and let the user carry it into `/plan-prd`. Never a top-level directory such as
 `docs/team-sessions/`.
 

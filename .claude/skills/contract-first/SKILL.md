@@ -24,7 +24,7 @@ See `CLAUDE.md`.
 
 ## In this workspace
 
-The canonical artifact is `docs/<YYYY-MM-DD>_<task>/api-contract.md`, written by
+The canonical artifact is `tasks/<YYYY-MM-DD>_<task>/api-contract.md`, written by
 `/plan` before the provider exists and read by the consumer teams (web, mobile, partners) -
 usually through an LLM of their own. `/plan`'s **API Contract** section holds the
 template and the rule for when a task needs one; this skill holds the reasoning

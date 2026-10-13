@@ -190,6 +190,8 @@ those logs and metrics live when the learned file records it.
 - **Read the previous deployment notes.** Carry forward its unresolved watch
   items, and flag any reversal - guidance given to another team that this
   release undoes is caught by nothing else.
+- Write a watch item so it can be checked: the endpoint, page or signal, and
+  what healthy looks like. `canary-watch` runs those checks after the deploy.
 
 ## Writing it
 

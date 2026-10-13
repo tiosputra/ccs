@@ -15,7 +15,7 @@ covers — the cross-service memory graph.
 
 | The fact is about | Home | Written by |
 |---|---|---|
-| One task — what was tried, decided, built | `docs/<date>_<task>/` — `prd.md`, `plan.md`, `log.md` | `/plan-prd`, `/plan`, `/save-session`, `/task finish` |
+| One task — what was tried, decided, built | `tasks/<date>_<task>/` — `prd.md`, `plan.md`, `log.md` | `/plan-prd`, `/plan`, `/save-session`, `/task finish` |
 | How Claude should work for this user — preferences, corrections | auto-memory (`MEMORY.md` and its files) | the session, when told |
 | How one repo writes code — its logger, its test layout | `.claude/learned/<repo>/<skill>.md` | `/learn` |
 | What a repo's team requires | that repo's `AGENTS.md` | the team — never this workspace |
@@ -91,7 +91,7 @@ task's docs before acting on it, and say how old it is.
   service depends on, a provider behaving unlike its docs.
 
 Do not mirror a task log, a plan, or code structure into it. If the next session could
-find it with `grep docs/` or a `graph-<repo>` query, it does not belong here.
+find it with `grep tasks/` or a `graph-<repo>` query, it does not belong here.
 
 ## Quality gate
 

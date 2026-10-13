@@ -125,11 +125,11 @@ task_holding() {
   return 1
 }
 
-# task_log <task> - docs/<date>_<task>/log.md, absolute, if the task has one. The
+# task_log <task> - tasks/<date>_<task>/log.md, absolute, if the task has one. The
 # date is the day the task opened and cannot be derived, so it is globbed.
 task_log() {
   local d
-  for d in "$TL_ROOT"/docs/*_"$1"/; do
+  for d in "$TL_ROOT"/tasks/*_"$1"/; do
     [ -f "${d}log.md" ] && { printf '%s
 ' "${d}log.md"; return 0; }
   done

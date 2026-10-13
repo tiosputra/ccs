@@ -5,6 +5,9 @@ Inspired by : https://github.com/affaan-m
 
 A Claude Code workspace for working on one or more service repos, task by task.
 
+New here? Start with [`USAGE.md`](USAGE.md) — every command and what it does, in
+one page.
+
 Clone it next to the repos you work on, put those repos in `repos/`, and every
 task gets the same flow: a PRD you confirm, a plan, a test-first build, a code
 review you confirm, and one pull request per repo. Nothing in it names a
@@ -29,7 +32,7 @@ experiment, with no stashing and no `git checkout` whiplash between them.
 │   └── <task>/
 │       └── <repo>/             -> repos/<repo>  on <prefix>/<task>
 │
-├── docs/                   one directory per task - everything written about it
+├── tasks/                  one directory per task - everything written about it
 │   └── 2026-08-28_add-label/
 │       ├── prd.md              requirements, confirmed at Gate 1
 │       ├── plan.md             milestone 1 (plan-m2.md, plan-m3.md follow)
@@ -38,11 +41,21 @@ experiment, with no stashing and no `git checkout` whiplash between them.
 │       ├── log.md              /save-session's working log, then the wrap-up at finish
 │       └── <anything>          supporting files - .sql, .csv, examples, notes
 │
+├── project/                source material every task reads - the spec, briefs, design handoff
+│
+├── business/               the business pipelines - not tasks, no repo, no gates
+│   ├── ideas/<idea>/           /idea - brief.md, investor/
+│   ├── branding/               /brand - the interview modules, brandbook, voice profile
+│   ├── marketing/              /market - scan, competitive benchmark, market brief
+│   └── decide.md               /decide - go / no-go with evidence, ranked
+│
 ├── release/                deployment notes, one per release
 │
 ├── .claude/
-│   ├── commands/           /plan-prd, /plan, /task, /pr, /ccs, /learn, /graph, /deployment-notes
-│   ├── skills/             tdd-workflow, logging, ccs-conventions, the pattern skills
+│   ├── commands/           /plan-prd, /plan, /task, /pr, /ccs, /learn, /graph, /deployment-notes,
+│   │                       /idea, /brand, /market, /decide
+│   ├── skills/             tdd-workflow, logging, ccs-conventions, the pattern skills,
+│   │                       the product, brand and market skills
 │   ├── learned/            per-repo facts a skill learned - gitignored, see /learn
 │   ├── state/              which tasks are open on this machine - gitignored
 │   ├── agents/             the reviewers, tdd-guide, build resolvers run by hand
@@ -52,6 +65,7 @@ experiment, with no stashing and no `git checkout` whiplash between them.
 │       ├── tasklib.sh      where a task's work lives - the one place that knows
 │       ├── ccs.sh          checks the workspace system itself
 │       ├── learn.sh        which learned facts exist, and whether they are stale
+│       ├── business.sh     what the business pipelines have written, and what is stale
 │       └── graph.sh        code-review-graph graphs, kept outside the repos they describe
 ```
 
@@ -114,14 +128,14 @@ One command runs a task end to end, stopping twice to ask you:
 ```
 /plan-prd add promo codes from branch origin/feature/m5.1
       |
-      |   writes docs/YYYY-MM-DD_add-promo-codes/prd.md
+      |   writes tasks/YYYY-MM-DD_add-promo-codes/prd.md
       |   the PRD proposes the task: repos, isolation, source branch, new branch, PR base
       |   nothing is started yet
       |
  [GATE 1]  you read the PRD and confirm - or correct the repos / isolation / source branch
       |
       |   task.sh start           -> each repo's working directory, on <prefix>/add-promo-codes
-      |   /plan                   -> docs/<date>_add-promo-codes/plan.md
+      |   /plan                   -> tasks/<date>_add-promo-codes/plan.md
       |   tdd-workflow            -> implementation, RED/GREEN, evidence report
       |   reviewers by language   -> CRITICAL and HIGH findings fixed
       |
@@ -134,6 +148,37 @@ Those two stops are the whole point: you read the requirements before a branch
 exists, and you see the finished work before anything is pushed.
 
 `/plan`, `/task`, and `/pr` all still work standalone if you want a single step.
+
+## The business flow
+
+Before there is anything to build, four commands decide what is worth building.
+They write into `business/`, never into a repo, and none of them starts a task:
+
+```
+/idea focus-buddy --investor-material
+<describe the idea on the lines below>
+      |   product-lens, gut       -> business/ideas/focus-buddy/brief.md   (verdict: go / no-go / not yet)
+      |   investor-materials      -> business/ideas/focus-buddy/investor/  (only with the flag)
+      |
+/brand discover | voice          -> business/branding/   one brand, interviewed module by module
+/market scan | compete | report  -> business/marketing/  size and demand, competitors benchmarked, one brief
+      |
+/decide                          -> business/decide.md   every idea re-judged with the evidence, ICE-ranked
+      |
+   go  ->  /plan-prd <idea> from branch <ref>          the idea becomes a task
+```
+
+`/brand` and `/market` with no argument say where that pipeline stands and what
+to run next. The brand interview runs over several sessions; its checkpoint means
+any session picks up where the last stopped.
+
+### Skills outside the flows
+
+Some skills have no command, because they apply to code or to a deploy rather than
+to a step: `design-system` and `liquid-glass-design` for UI work, `e2e-testing`
+for Playwright suites, `verification-loop` as a last pass on work that did not come
+through `/plan-prd`, and `browser-qa` and `canary-watch` after a deploy - the
+deployment notes' watch items are their checklist.
 
 ## In place or in a space
 
@@ -190,7 +235,7 @@ See which repos are checked out at all, and what your settings resolve to:
 
 Stop for the day, or before the context fills, and pick it up in a fresh session.
 `/save-session` writes where the task stands — next step, what failed and why,
-what was decided — into `docs/<date>_<task>/log.md`; `/resume-session` reads it
+what was decided — into `tasks/<date>_<task>/log.md`; `/resume-session` reads it
 back and briefs the new session before it touches anything:
 
 ```
@@ -202,7 +247,7 @@ You rarely need the name: every new session starts with a short list of the open
 tasks that have a saved log, printed by the one `SessionStart` hook. It only
 informs; it cannot block a session.
 
-Finish up. This turns `docs/<date>_<task>/log.md` into the wrap-up (or writes it,
+Finish up. This turns `tasks/<date>_<task>/log.md` into the wrap-up (or writes it,
 if nothing was saved) **before** anything moves, so the summary is captured while
 the diffs are still there:
 
@@ -347,8 +392,8 @@ plan, or a README; it would be wrong for everyone else.
 
 ### Editor search
 
-`repos/`, `spaces/` and `docs/` are all gitignored — their contents belong to
-the service repos, or describe private incidents. VS Code honours `.gitignore`,
+`repos/`, `spaces/`, `tasks/`, `project/` and `business/` are all gitignored —
+their contents belong to the service repos, or are private to the project. VS Code honours `.gitignore`,
 so out of the box cmd+P and the search panel could not see any of them.
 
 The tracked `.ignore` at the root fixes that. Search tools read it and give it

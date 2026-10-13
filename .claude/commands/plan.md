@@ -1,6 +1,6 @@
 ---
 description: Restate requirements, assess risks, and create step-by-step implementation plan for a task. WAIT for user CONFIRM before touching any code.
-argument-hint: "[task description | docs/<YYYY-MM-DD>_<task>/prd.md]"
+argument-hint: "[task description | tasks/<YYYY-MM-DD>_<task>/prd.md]"
 allowed-tools: Bash(.claude/scripts/task.sh:*), Read, Write, Edit, Glob, Grep
 ---
 
@@ -32,7 +32,7 @@ Use `/plan` when:
 
 A plan is only valid for one task. Resolve the binding before anything else.
 
-**From a PRD** (`docs/<YYYY-MM-DD>_<task>/prd.md`): read its `## Task` table. That gives
+**From a PRD** (`tasks/<YYYY-MM-DD>_<task>/prd.md`): read its `## Task` table. That gives
 the task name, isolation, repos, branch, and source branch. Confirm the task has started,
 and get its working directories and base commits:
 
@@ -88,13 +88,13 @@ The assistant will:
 
 | Input | Mode | Behavior |
 |---|---|---|
-| `docs/<YYYY-MM-DD>_<task>/prd.md` | PRD artifact mode | Read the PRD's Task block and milestones, pick the next pending milestone, and write the plan beside it in the same directory |
+| `tasks/<YYYY-MM-DD>_<task>/prd.md` | PRD artifact mode | Read the PRD's Task block and milestones, pick the next pending milestone, and write the plan beside it in the same directory |
 | Any other markdown path | Reference mode | Read the file as context, bind the task per Step 0, produce an inline plan |
 | Free-form text | Conversational mode | Bind the task per Step 0, produce an inline plan |
 | Empty input | Clarification mode | Ask what should be planned |
 
 **The plan lives in the task's own directory**, next to the PRD it came from —
-`docs/<YYYY-MM-DD>_<task>/`. That directory already exists in PRD artifact mode: it is the
+`tasks/<YYYY-MM-DD>_<task>/`. That directory already exists in PRD artifact mode: it is the
 one holding the PRD you were handed. Never create a second directory for the same task,
 and never guess its date — the PRD's path is the directory.
 
@@ -105,16 +105,16 @@ at a time, so each milestone gets its own file in that directory:
 |---|---|
 | Milestone 1, or a PRD with no milestones table | `plan.md` |
 | Milestone `<N>`, `<N>` > 1 | `plan-m<N>.md` |
-| Free-form or reference mode | inline, or `docs/<date>_<task>/plan.md` if the user wants a file |
+| Free-form or reference mode | inline, or `tasks/<date>_<task>/plan.md` if the user wants a file |
 
 Milestone 1 is plain `plan.md` because most tasks only ever have one. The moment a second
 milestone is planned it becomes `plan-m2.md`; `plan.md` is never renamed.
 
 Never write two milestones to the same file — milestone 2 must not overwrite the plan that
 produced milestone 1, because that plan is the record its TDD evidence points back to.
-Before writing, `ls docs/*_<task>/` and see which plans are already there.
+Before writing, `ls tasks/*_<task>/` and see which plans are already there.
 
-In free-form mode there may be no task directory yet. Create `docs/<today>_<task>/` with
+In free-form mode there may be no task directory yet. Create `tasks/<today>_<task>/` with
 today's `date +%F` only if the user wants the plan written to a file.
 
 If a plan for **this same milestone** already exists, read it and revise it in place. A
@@ -164,7 +164,7 @@ should not have to re-read the repo to see why the plan departs from a skill.
 ## API Contract
 
 Anything a consumer can observe changing at a boundary is written down separately, in
-`docs/<YYYY-MM-DD>_<task>/api-contract.md`. The consumer teams read that file - often
+`tasks/<YYYY-MM-DD>_<task>/api-contract.md`. The consumer teams read that file - often
 through an LLM of their own - and build against it while the provider is still being
 written. It is the one task artifact with a reader outside this workspace, so it must
 stand on its own: assume no plan, no PRD, and no knowledge of this workspace.
@@ -343,7 +343,7 @@ Questions**. A guessed answer is worse than an empty cell: the consumer builds o
 
 ## PRD Artifact Output
 
-When called with a PRD file (`docs/<YYYY-MM-DD>_<task>/prd.md`), write the plan beside it —
+When called with a PRD file (`tasks/<YYYY-MM-DD>_<task>/prd.md`), write the plan beside it —
 `plan.md` for milestone 1, `plan-m<N>.md` after that — using this structure.
 
 Dates come from `date +%F` — run it, never guess. *Created* is written once; *Last updated*
@@ -362,7 +362,7 @@ unknown. If the task's directory holds a `capability.md` (written with the
 **Workspace root**: `{absolute path from task.sh root}`
 **Working directories**: `{repo}` -> `{path from task.sh where}`, one per repo
 **Base commits**: `{repo}` `a1b2c3d4e`, one per repo
-**Source PRD**: `docs/<YYYY-MM-DD>_<task>/prd.md`
+**Source PRD**: `tasks/<YYYY-MM-DD>_<task>/prd.md`
 **Selected Milestone**: {N} — {milestone name}
 **Complexity**: {Small | Medium | Large}
 **Created**: {YYYY-MM-DD} · **Last updated**: {YYYY-MM-DD}
@@ -414,8 +414,8 @@ cd "$(.claude/scripts/task.sh where <task> <repo>)" && {project-specific validat
 ## Handoff
 <!-- What a layout-blind skill or agent needs, and nothing more. -->
 
-**Evidence report**: `docs/<YYYY-MM-DD>_<task>/testing.md`
-**API contract**: `docs/<YYYY-MM-DD>_<task>/api-contract.md` — or `none, no boundary change`
+**Evidence report**: `tasks/<YYYY-MM-DD>_<task>/testing.md`
+**API contract**: `tasks/<YYYY-MM-DD>_<task>/api-contract.md` — or `none, no boundary change`
 
 | Consumer | Working directory | Base ref |
 |---|---|---|
@@ -442,17 +442,17 @@ Report the handoff explicitly:
 Task:  <task>  (inplace | space)  repos <repo>, <repo>  branch <prefix>/<task>
 
 Milestone: {N} — {milestone name}
-Plan written: docs/<date>_<task>/plan.md          (plan-m{N}.md for a later milestone)
-API contract: docs/<date>_<task>/api-contract.md  ({n} changes: {n} endpoints, {n} fields,
+Plan written: tasks/<date>_<task>/plan.md          (plan-m{N}.md for a later milestone)
+API contract: tasks/<date>_<task>/api-contract.md  ({n} changes: {n} endpoints, {n} fields,
                                                    {n} socket events, {n} breaking)
               (or: none — this milestone changes no boundary)
 PRD updated: milestone {N} -> in-progress
 
-Next step (after you confirm): tdd-workflow skill with docs/<date>_<task>/plan.md
+Next step (after you confirm): tdd-workflow skill with tasks/<date>_<task>/plan.md
   -> pass it the working directory: task.sh where <task> <repo>
      the workspace root: task.sh root
-     the evidence report path: docs/<date>_<task>/testing.md
-     and the API contract path: docs/<date>_<task>/api-contract.md
+     the evidence report path: tasks/<date>_<task>/testing.md
+     and the API contract path: tasks/<date>_<task>/api-contract.md
      The skill takes the plan's tasks and Validate commands as intent, then proves
      each one through its own RED/GREEN gate. It knows the directory, not the task.
 ```
@@ -477,7 +477,7 @@ Assistant:
 **Branch**: `<prefix>/market-resolution-notifications` from `origin/develop`
 **Working directories**: `api` -> `{from task.sh where}`, `worker` -> `{from task.sh where}`
 **Base commits**: `api` `3f2a91c0d`, `worker` `b71e04a9e`
-**Source PRD**: `docs/2026-03-02_market-resolution-notifications/prd.md`
+**Source PRD**: `tasks/2026-03-02_market-resolution-notifications/prd.md`
 **Selected Milestone**: 1 — in-app notifications
 **Complexity**: Medium
 
@@ -525,8 +525,8 @@ the api serves them to the in-app bell. Email and webhook channels are milestone
 - [ ] `GET /v1/notifications` is in `api-contract.md`
 
 ## Handoff
-**Evidence report**: `docs/2026-03-02_market-resolution-notifications/testing.md`
-**API contract**: `docs/2026-03-02_market-resolution-notifications/api-contract.md`
+**Evidence report**: `tasks/2026-03-02_market-resolution-notifications/testing.md`
+**API contract**: `tasks/2026-03-02_market-resolution-notifications/api-contract.md`
 
 **WAITING FOR CONFIRMATION**: Proceed with this plan? (yes/no/modify)
 ```
@@ -548,19 +548,19 @@ The workspace chain is:
 
 ```
 /task start <task> --from <ref>  ->  working directories (task.sh where)
-/plan-prd                        ->  docs/<date>_<task>/prd.md
-/plan                            ->  docs/<date>_<task>/plan.md   (plan-m2.md, ... per milestone)
-                                 ->  docs/<date>_<task>/api-contract.md   (when a boundary changes)
-tdd-workflow skill               ->  implementation, evidence in docs/<date>_<task>/testing.md
-/save-session, /resume-session   ->  docs/<date>_<task>/log.md   (working log, between sessions)
+/plan-prd                        ->  tasks/<date>_<task>/prd.md
+/plan                            ->  tasks/<date>_<task>/plan.md   (plan-m2.md, ... per milestone)
+                                 ->  tasks/<date>_<task>/api-contract.md   (when a boundary changes)
+tdd-workflow skill               ->  implementation, evidence in tasks/<date>_<task>/testing.md
+/save-session, /resume-session   ->  tasks/<date>_<task>/log.md   (working log, between sessions)
 /task finish <task>              ->  log.md becomes the wrap-up, then finish
 ```
 
-Every artifact of a task lands in one directory, `docs/<date>_<task>/`. The date is the day
-the PRD was written; find an existing directory with `ls -d docs/*_<task>/` rather than
+Every artifact of a task lands in one directory, `tasks/<date>_<task>/`. The date is the day
+the PRD was written; find an existing directory with `ls -d tasks/*_<task>/` rather than
 reconstructing it.
 
-- **Need requirements first?** Use `/plan-prd` — it names the task, starts it, and writes `docs/<date>_<task>/prd.md`. Then pass that PRD back to `/plan`.
+- **Need requirements first?** Use `/plan-prd` — it names the task, starts it, and writes `tasks/<date>_<task>/prd.md`. Then pass that PRD back to `/plan`.
 - **Ready to build?** Hand the generated plan to the `tdd-workflow` skill
   (`.claude/skills/tdd-workflow/SKILL.md`) with the plan path as its argument. The skill
   treats the plan as untrusted input: it converts each task into a failing test first, and

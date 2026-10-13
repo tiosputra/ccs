@@ -21,8 +21,8 @@ about (`task.sh where <task> <repo>`):
    ADR is then a change to that repo: it is written during the task and ships in the
    task's pull request like any other file.
 2. **It does not** — record the ADR as a supporting file of the task:
-   `docs/<YYYY-MM-DD>_<task>/adr-<NNNN>-<slug>.md`, found with `ls -d docs/*_<task>/`.
-   Number it by globbing `docs/*/adr-*.md` across all tasks and taking the next number,
+   `tasks/<YYYY-MM-DD>_<task>/adr-<NNNN>-<slug>.md`, found with `ls -d tasks/*_<task>/`.
+   Number it by globbing `tasks/*/adr-*.md` across all tasks and taking the next number,
    so the workspace's decisions read as one sequence.
 
 Never create a new ADR directory inside a service repo on your own: whether a repo keeps
@@ -91,7 +91,7 @@ The lightweight format proposed by Michael Nygard:
 ## Reading existing ADRs
 
 When someone asks "why did we choose X?", check the repo's own ADR location, then
-`docs/*/adr-*.md`. Present the Context and Decision of any match. If there is none, say so
+`tasks/*/adr-*.md`. Present the Context and Decision of any match. If there is none, say so
 and offer to record one now — a backfilled ADR notes the original date of the decision.
 
 ## Decision Detection Signals

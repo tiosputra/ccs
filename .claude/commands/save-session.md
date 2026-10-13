@@ -10,7 +10,7 @@ allowed-tools: Bash(.claude/scripts/task.sh list:*), Bash(.claude/scripts/task.s
 
 ## What this is
 
-A task's working memory lives in one file: `docs/<YYYY-MM-DD>_<task>/log.md`, the
+A task's working memory lives in one file: `tasks/<YYYY-MM-DD>_<task>/log.md`, the
 same file `/task finish` later turns into the task's wrap-up. `/save-session` writes
 what this session learned into it; `/resume-session` reads it back in a fresh
 session. There is no second store — nothing goes to `~/.claude/`, and nothing goes
@@ -29,14 +29,14 @@ log; offer `/ccs note` for anything worth keeping from it.
 
 ### 2. Gather the facts
 
-Run `.claude/scripts/task.sh report <task>`. Its `docs` line is the task's directory
+Run `.claude/scripts/task.sh report <task>`. Its `dir` line is the task's directory
 and its `today` line is the date — never a date from memory. Its per-repo lines give
 each working directory, uncommitted count and changed files; read those rather than
 re-deriving them. For an uncommitted repo, `git -C <workdir> diff --stat` shows what
 moved.
 
-If `docs` reads `-`, the task ran outside `/plan-prd` and has no directory: create
-`docs/<today>_<task>/` and say so.
+If `dir` reads `-`, the task ran outside `/plan-prd` and has no directory: create
+`tasks/<today>_<task>/` and say so.
 
 Then add what only this conversation knows: what was attempted, what failed and
 the exact reason, what was decided, what is still open.
@@ -56,7 +56,7 @@ than reopening it.
 - **Branch:** <branch line from the report>
 - **Repos:** <repo>, <repo> · **Isolation:** inplace | space
 - **Base:** <base ref>
-- **Opened:** <date from the docs directory name> · **Closed:** —
+- **Opened:** <date from the task directory name> · **Closed:** —
 
 ## Current state
 

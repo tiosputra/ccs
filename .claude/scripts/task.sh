@@ -45,7 +45,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REPOS_DIR="$ROOT/repos"
 SPACES_DIR="$ROOT/spaces"
-DOCS_DIR="$ROOT/docs"
+TASKS_DIR="$ROOT/tasks"
 
 . "$SCRIPT_DIR/config.sh"
 . "$SCRIPT_DIR/tasklib.sh"
@@ -520,7 +520,7 @@ cmd_list() {
 
 # Each open task's working log: the facts /resume-session and the SessionStart
 # hook read. One row per open task, read-only:
-#   log<TAB><task><TAB><docs/.../log.md | -><TAB><last saved | -><TAB><open|closed|none>
+#   log<TAB><task><TAB><tasks/.../log.md | -><TAB><last saved | -><TAB><open|closed|none>
 # none means nothing was saved yet; closed means /task finish already wrote the
 # wrap-up but the task record is still open.
 cmd_logs() {
@@ -552,16 +552,16 @@ cmd_report() {
   printf 'isolation\t%s\n' "$(task_isolation "$task")"
   printf 'today\t%s\n' "$(date '+%Y-%m-%d')"
 
-  # Where this task's docs live: docs/<YYYY-MM-DD>_<task>/. The date is the day
+  # Where this task's directory is: tasks/<YYYY-MM-DD>_<task>/. The date is the day
   # the task opened, so it cannot be derived - it is globbed. `-` means the task
   # never had a PRD, and whoever writes the log creates the directory.
   local d docdir=""
-  for d in "$DOCS_DIR"/*_"$task"/; do
+  for d in "$TASKS_DIR"/*_"$task"/; do
     [ -d "$d" ] || continue
     docdir="${d#$ROOT/}"; docdir="${docdir%/}"
     break
   done
-  printf 'docs\t%s\n' "${docdir:--}"
+  printf 'dir\t%s\n' "${docdir:--}"
   printf 'branch\t%s\n' "$(task_branch "$task")"
   printf 'created\t%s\n' "$(task_field "$task" created)"
 

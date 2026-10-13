@@ -35,9 +35,9 @@ a task is in place unless `--space` is passed, and no setting changes that.
 
 "Task", "space", "feature", "story", "bugfix" and "hotfix" all mean the same
 thing here; `.claude/` calls it a **task**. One kebab-case name is reused
-everywhere: the branch, `docs/<YYYY-MM-DD>_<task>/`, and, for a space,
-`spaces/<task>/`. Pick it once and never rename it mid-flight. Find a task's docs
-with `ls -d docs/*_<task>/`, never by guessing the date.
+everywhere: the branch, `tasks/<YYYY-MM-DD>_<task>/`, and, for a space,
+`spaces/<task>/`. Pick it once and never rename it mid-flight. Find a task's directory
+with `ls -d tasks/*_<task>/`, never by guessing the date.
 
 **Repo aliases are read from disk, never from a list in this file.** Any git
 checkout directly under `repos/` is a repo, and its directory name is its alias;
@@ -103,8 +103,8 @@ The session is now bound to this task. Point at what comes next, using the same
 task name throughout:
 
 ```
-/plan-prd <idea>                    -> docs/<date>_<task>/prd.md  (also starts the task)
-/plan docs/<date>_<task>/prd.md     -> docs/<date>_<task>/plan.md
+/plan-prd <idea>                    -> tasks/<date>_<task>/prd.md  (also starts the task)
+/plan tasks/<date>_<task>/prd.md     -> tasks/<date>_<task>/plan.md
 tdd-workflow <plan path>            -> implementation in each repo's working directory
 ```
 
@@ -163,12 +163,12 @@ unless it is `1`.
 #### 2. Write the log
 
 The log belongs in the task's own directory, as
-`docs/<YYYY-MM-DD>_<task>/log.md`. The report's `docs` line names that directory
+`tasks/<YYYY-MM-DD>_<task>/log.md`. The report's `dir` line names that directory
 - a task that came through `/plan-prd` already has one, holding its PRD and its
 plans, and the log joins them there.
 
-If the `docs` line reads `-`, this task ran outside the documented flow and has
-no directory yet. Create `docs/<today>_<task>/` using the report's `today` line
+If the `dir` line reads `-`, this task ran outside the documented flow and has
+no directory yet. Create `tasks/<today>_<task>/` using the report's `today` line
 - never a date from memory - and say in your report that the task had no PRD.
 
 The date in that directory name is the day the task **opened**, so an existing

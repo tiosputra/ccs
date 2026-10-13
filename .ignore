@@ -2,8 +2,9 @@
 # file and give it precedence over .gitignore in the same directory. Git itself
 # never reads it, so nothing here changes what is tracked or committed.
 #
-# The root .gitignore hides /repos/*, /spaces/* and /docs/* from git - that
-# content belongs to the service repos, or describes private incidents - and
+# The root .gitignore hides /repos/*, /spaces/*, /tasks/*, /project/* and
+# /business/* from git - that content belongs to the service repos, or is
+# private to this project - and
 # VS Code honours .gitignore everywhere, which hid them from search too. These
 # negations put them back for *search* only. Every .gitignore *inside* a repo or
 # worktree still applies underneath, so node_modules/, .next/, dist/ and vendor/
@@ -11,7 +12,9 @@
 
 !/repos/*
 !/spaces/*
-!/docs/*
+!/tasks/*
+!/project/*
+!/business/*
 
 # Release runbooks are small and worth searching; drop this line if not.
 !/release/*

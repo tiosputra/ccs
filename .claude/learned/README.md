@@ -36,7 +36,7 @@ does not make it stale.
 
 These files describe the private services: their loggers, their internals, the
 places they leak data. This repo ships the workspace system, not the services,
-so like `docs/` the contents stay on the machine that learned them. Each machine
+so like `tasks/` the contents stay on the machine that learned them. Each machine
 runs `/learn` once per repo.
 
 If a repo's facts should be shared with its whole team, the durable home is that

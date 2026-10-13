@@ -1,9 +1,9 @@
-# docs/
+# tasks/
 
 Everything written about a task, in one directory per task:
 
 ```
-docs/<YYYY-MM-DD>_<task>/
+tasks/<YYYY-MM-DD>_<task>/
 ├── prd.md        the requirements, written by /plan-prd and confirmed at Gate 1
 ├── plan.md       the implementation plan for milestone 1, written by /plan
 ├── plan-m2.md    one more file per later milestone: plan-m2.md, plan-m3.md, ...
@@ -27,16 +27,16 @@ Because the date is not derivable from the task name, find a task's directory by
 globbing rather than guessing:
 
 ```bash
-ls -d docs/*_<task>/
+ls -d tasks/*_<task>/
 ```
 
 Not every file is always present. A task abandoned after Gate 1 has only a
 `prd.md`; a task that ran outside the flow may have only a `log.md`.
 
-One directory belongs to no task: `docs/_project/` holds source material for the
-whole project — the BRD, the design handoff, user flows — that every task reads
-and none owns. Read it when writing a PRD or a plan. Nothing a task produces goes
-there.
+Nothing else lives here. Source material the whole project shares — the product
+spec, the design handoff — is in `project/`, and the business pipelines (`/idea`,
+`/brand`, `/market`, `/decide`) write to `business/`. Read `project/` when writing a
+PRD or a plan; nothing a task produces goes there.
 
 The contents stay local — they describe private services and their production
 incidents — so this README is the only tracked file here.

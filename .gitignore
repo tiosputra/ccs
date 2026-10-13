@@ -21,14 +21,25 @@
 # Written by task.sh, read through tasklib.sh; see tasklib.sh for the format.
 /.claude/state/
 
-# ----------------------------------------------------------------- task docs --
+# -------------------------------------------------------------------- tasks --
 # One directory per task - prd.md, plan.md, log.md, testing.md. They narrate real
 # bugs and fixes in the private services, so only the README is tracked.
-/docs/*
-!/docs/README.md
+/tasks/*
+!/tasks/README.md
+
+# Source material for the whole project - the product spec, briefs, the design
+# handoff. Every task reads it and none owns it; it is private like tasks/.
+/project/*
+!/project/README.md
+
+# The business pipelines - ideas, branding, marketing, the go/no-go decision -
+# written by /idea, /brand, /market and /decide. Private like tasks/: they hold
+# unreleased plans, founder interviews and investor material.
+/business/*
+!/business/README.md
 
 # The cross-service knowledge graph (knowledge/memory.jsonl), written by the memory
-# MCP server through knowledge-ops. It describes the private services, like docs/.
+# MCP server through knowledge-ops. It describes the private services, like tasks/.
 /knowledge/*
 !/knowledge/README.md
 
@@ -42,7 +53,7 @@
 
 # What skills learned about each repo (.claude/learned/<repo>/<skill>.md): which
 # logger a service uses, where it leaks data. They describe the private services,
-# so like docs/ only the README is tracked; each machine learns its own via /learn.
+# so like tasks/ only the README is tracked; each machine learns its own via /learn.
 /.claude/learned/*
 !/.claude/learned/README.md
 

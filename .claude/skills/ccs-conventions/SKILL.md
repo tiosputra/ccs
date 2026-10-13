@@ -225,7 +225,7 @@ script and hand-off asks rather than building `repos/<repo>` or
 `tasklib.sh`, whose header documents the metadata format.
 
 **One task, one directory.** Everything written about a task lives in
-`docs/<YYYY-MM-DD>_<task>/`. The standard artifacts have fixed names that
+`tasks/<YYYY-MM-DD>_<task>/`. The standard artifacts have fixed names that
 commands find them by: `prd.md`, `plan.md` (then `plan-m2.md`, `plan-m3.md`),
 `api-contract.md`, `testing.md`, `log.md`. Anything else a task produces — SQL,
 CSV, examples, notes for another team — is a supporting file beside them, free to
@@ -234,10 +234,30 @@ top-level directory beside it, and never a copy inside a service repo. A command
 that starts reading a supporting file by name has made it a standard artifact:
 add it to the list, to `CLAUDE.md`, and to `/ccs`'s `check_artifacts`. The date is the day
 the task opened and never changes, so commands find a directory by globbing
-`docs/*_<task>/` and never by reconstructing its name. The one directory beside
-the task directories is `docs/_project/`, for source material the whole project
-shares (a BRD, a design handoff); `check_artifacts` skips it, and nothing a task
-produces belongs there.
+`tasks/*_<task>/` and never by reconstructing its name. `tasks/` holds task
+directories and nothing else (it was `docs/` until 2026-10-13; `/ccs` flags a
+machine still on the old layout). Two directories sit beside it: `project/`, for
+source material the whole project shares (a BRD, a design handoff), which nothing
+a task produces belongs in; and `business/`, below.
+
+**The business pipelines are not tasks.** `/idea`, `/brand`, `/market` and
+`/decide` decide what is worth building and write only into `business/`: no
+branch, no gates, no working directory. They follow the same split as everything
+else - `business.sh` decides the layout and prints what exists, how old it is and
+what is stale; the commands judge what to do next. Their file names are fixed the
+way a task's standard artifacts are (`business/README.md` lists them), and
+`check_business` holds them to it. The two worlds meet at exactly one point:
+`/plan-prd` reads an idea's brief and `business/decide.md`. A business command
+that started a task, or a task that wrote into `business/`, would merge the two
+concepts this split keeps apart.
+
+**Imported skills are adapted where they meet the workspace, and nowhere else.**
+An ECC skill keeps its method. What changes is the seam: a *Where it sits in the
+flow* section naming the command that runs it and the file it is handed, output
+paths taken from the caller instead of its own default (`.ecc-design/`,
+`~/.claude/…`), slash commands it names that do not exist here turned into plain
+requests, and another product's defaults (a founder's voice, a hook on `git push`)
+removed.
 
 The one artifact that is easy to get wrong is the TDD evidence. `tdd-workflow`
 is layout-blind and writes wherever it is told; if nobody tells it, it writes
@@ -354,3 +374,8 @@ Two design rules the checks themselves follow, worth keeping if you add more:
   send a reader to `/task repos` and whether they name a repo that is not
   checked out — not whether every repo is listed. Nothing lists them, on
   purpose. Docs write `repos/<repo>`, never a real name.
+
+  The one deliberate exception is `USAGE.md`, the newcomer's single page of
+  every command. A catalogue's job is to repeat, so `check_usage` asks the
+  other question: does every file in `commands/` appear in it. A new command
+  ships with its line in `USAGE.md`, or `/ccs` reports it.

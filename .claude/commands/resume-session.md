@@ -11,7 +11,7 @@ allowed-tools: Bash(.claude/scripts/task.sh logs:*), Bash(.claude/scripts/task.s
 ## What this is
 
 The counterpart to `/save-session`. A task's working memory is its
-`docs/<YYYY-MM-DD>_<task>/log.md`: a `## Current state` section that the last save
+`tasks/<YYYY-MM-DD>_<task>/log.md`: a `## Current state` section that the last save
 overwrote, and a `## Sessions` history that every save appended to. This command
 reads it and briefs the session — it does not start work.
 
@@ -28,7 +28,7 @@ session may already have seen the open ones: the `SessionStart` hook prints them
 - **No argument** — take the `open` row with the newest last-saved date. If two were
   saved the same day, list them and ask which.
 - **State `none`** — the task has no saved session yet (`/save-session` writes one).
-  Offer to brief from its `prd.md` and `plan.md` instead (`ls -d docs/*_<task>/`), and
+  Offer to brief from its `prd.md` and `plan.md` instead (`ls -d tasks/*_<task>/`), and
   stop there.
 - **State `closed`** — `/task finish` already wrote the wrap-up: say so, and offer it
   as reading rather than resuming it.
@@ -44,7 +44,7 @@ now.
 ### 3. Brief
 
 ```
-RESUMED: <task> — docs/<date>_<task>/log.md
+RESUMED: <task> — tasks/<date>_<task>/log.md
 Last saved: <date of the newest session entry> (<N> days ago)
 
 BUILDING:

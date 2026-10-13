@@ -1,6 +1,6 @@
 {
   // Quick Open (cmd+P) and the search panel use ripgrep, which honours
-  // .gitignore. The root .gitignore hides /repos/*, /spaces/* and /docs/*, so
+  // .gitignore. The root .gitignore hides /repos/*, /spaces/*, /tasks/*, /project/* and /business/*, so
   // none of them were reachable. The /.ignore file at the workspace root negates
   // those rules; ripgrep gives .ignore precedence over .gitignore in the same
   // directory, and every .gitignore inside a repo or worktree still applies.
