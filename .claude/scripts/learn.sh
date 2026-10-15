@@ -35,7 +35,6 @@ ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CLAUDE_DIR="$ROOT/.claude"
 LEARNED="$CLAUDE_DIR/learned"
 . "$SCRIPT_DIR/config.sh"
-. "$SCRIPT_DIR/tasklib.sh"
 cfg_resolve REFERENCE_REPOS ""
 
 usage() { sed -n '3,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
@@ -158,16 +157,17 @@ digest() {
   if command -v shasum >/dev/null 2>&1; then shasum -a 1; else sha1sum; fi | cut -c1-12
 }
 
-# The commit a repo's watched content is read at. Normally HEAD - no one works in
-# repos/ outside a task, so HEAD is what was cloned. While an in-place task holds
-# the checkout, HEAD is the task branch with its unmerged work, so the task's
-# base commit is used instead: a learned file describes the repo, not the task
-# in flight, and must not go stale because of it.
+# The ref a repo's watched content is read at: the remote's default branch,
+# origin/HEAD. A learned file describes the repo's mainline, so it is stamped and
+# checked at the same fixed ref, whatever repos/<repo> has checked out - an
+# in-place task's branch, or a branch someone switched to by hand. Measuring at
+# HEAD made a file stamped on one branch read stale on every other, and blocked
+# every space task on that repo. HEAD only when there is no origin/HEAD.
 fingerprint_ref() {
-  local repo="$1" dir="$2" t base
+  local dir="$1"
   git -C "$dir" rev-parse --git-dir >/dev/null 2>&1 || return 1
-  if t="$(task_holding "$repo")" && base="$(task_base "$t" "$repo")"; then
-    printf '%s\n' "${base#*	}"
+  if git -C "$dir" rev-parse -q --verify origin/HEAD >/dev/null 2>&1; then
+    git -C "$dir" rev-parse --abbrev-ref origin/HEAD
   else
     printf '%s\n' HEAD
   fi
@@ -193,7 +193,7 @@ fingerprint() {
   local skill="$1" repo="$2" dir ref kind arg rest f
   dir="$(repo_dir "$repo")"
   [ -n "$dir" ] || return 1
-  ref="$(fingerprint_ref "$repo" "$dir")" || ref=""
+  ref="$(fingerprint_ref "$dir")" || ref=""
   { fm_list "$(skill_file "$skill")" fingerprint
     fm_list "$(learned_file "$skill" "$repo")" watch 2>/dev/null
   } | while read -r kind arg rest; do
@@ -298,12 +298,18 @@ cmd_slash() {
   printf 'skill\t%s\n'        "$skill"
   printf 'repo\t%s\n'         "$repo"
   printf 'repo_dir\t%s\n'     "$(rel "$(repo_dir "$repo")")"
-  # An in-place task has the checkout on its branch; the scan must describe the
-  # repo, not that task's unmerged work.
-  local held base
-  if held="$(task_holding "$repo")"; then
-    base="$(task_base "$held" "$repo")"
-    printf 'held\t%s\t%s\n' "$held" "${base#*	}"
+  # The scan reads the same ref the fingerprint does. When the checkout is on
+  # anything else, the working tree is not what is being learned.
+  local dir ref sha
+  dir="$(repo_dir "$repo")"
+  if ref="$(fingerprint_ref "$dir")"; then
+    sha="$(git -C "$dir" rev-parse --short "$ref" 2>/dev/null)"
+    printf 'read_at\t%s\t%s\n' "$ref" "$sha"
+    if [ "$(git -C "$dir" rev-parse HEAD 2>/dev/null)" = "$(git -C "$dir" rev-parse "$ref" 2>/dev/null)" ]; then
+      printf 'checkout\tat_ref\n'
+    else
+      printf 'checkout\telsewhere\t%s\n' "$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+    fi
   fi
   printf 'discover\t%s\n'     "$(rel "$CLAUDE_DIR/skills/$skill/discover.md")"
   printf 'learned_file\t%s\n' "$(rel "$(learned_file "$skill" "$repo")")"

@@ -68,12 +68,13 @@ unasked.
 It is the repo's checkout under `repos/`. Search, read, `git log`; never edit,
 never generate into it.
 
-If the result has a `held` line, an in-place task has that checkout on its
-branch, so the working tree carries the task's unmerged work. Learn the repo,
-not the task: where the task has changed a file, read it at the base commit the
-`held` line gives (`git -C <repo_dir> show <sha>:<path>`), and say in your report
-that the scan ran while a task held the repo. The fingerprint is already read at
-that commit.
+Learn the repo's mainline, at the `read_at` ref (the remote's default branch).
+The fingerprint is read there, so a scan of anything else is stamped against the
+wrong code. If `checkout` says `elsewhere`, the working tree is on another branch
+(an in-place task's, or one switched to by hand). Read files at the ref with
+`git -C <repo_dir> show <ref>:<path>` and search with `git grep <pattern> <ref>`,
+not the working tree. Do not switch the checkout. Say in your report which branch
+the checkout was on.
 
 **Measure, do not estimate.** Every number in the file comes from a command you
 ran in this scan. Say what you searched when the answer is "none found", so a
