@@ -135,11 +135,12 @@ One command runs a task end to end, stopping twice to ask you:
  [GATE 1]  you read the PRD and confirm - or correct the repos / isolation / source branch
       |
       |   task.sh start           -> each repo's working directory, on <prefix>/add-promo-codes
-      |   /plan                   -> tasks/<date>_add-promo-codes/plan.md
-      |   tdd-workflow            -> implementation, RED/GREEN, evidence report
-      |   reviewers by language   -> CRITICAL and HIGH findings fixed
+      |   then, for every milestone in the PRD:
+      |     /plan                 -> tasks/<date>_add-promo-codes/plan.md (plan-m2.md, ...)
+      |     tdd-workflow          -> implementation, RED/GREEN, evidence report
+      |     reviewers by language -> CRITICAL and HIGH findings fixed
       |
- [GATE 2]  it reports what changed and stops, uncommitted
+ [GATE 2]  every milestone done: it reports what changed and stops, uncommitted
       |
     /pr     stage, commit, push <prefix>/add-promo-codes, open one PR per repo
 ```

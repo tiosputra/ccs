@@ -132,10 +132,17 @@ summary of them.
 This is where the work becomes commits. Per repo, from its working directory:
 
 ```bash
-git add -A -- . ':(exclude).env*' ':(exclude)*.pem' ':(exclude)*.key'
+git add -A
+git reset -q -- ':(glob)**/.env*' ':(glob)**/*.pem' ':(glob)**/*.key' \
+  ':(glob)**/id_rsa*' ':(glob)**/*credentials*'
 git status --short          # show what is staged, before committing
 git commit -m "<message>"
 ```
+
+Stage everything, then unstage the secrets — not `git add` with `:(exclude)`
+pathspecs. When `.env` is gitignored, as it is in every space, an exclude that names it
+makes `git add` exit 1 even though it staged the rest, and a `&&` chain never reaches
+the commit.
 
 **Message** — conventional commit, derived from the PRD milestone and the plan, not from
 the file list:

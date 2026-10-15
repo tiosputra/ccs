@@ -184,15 +184,17 @@ A task runs start to finish in one session, stopping at exactly two points to as
         |
    [GATE 1] you read the PRD and confirm
         |
-   starts the task -> plans -> implements test-first -> code review
+   starts the task -> for every milestone: plan -> implement test-first -> code review
         |
-   [GATE 2] you confirm the work is ready
+   [GATE 2] the whole PRD is built - you confirm the work is ready
         |
    /pr  -> stage, commit, push, open the PR
 ```
 
 Never pass a gate on your own. Between them, run without stopping to ask permission for
-each step - the confirmation at Gate 1 covers the whole build.
+each step - the confirmation at Gate 1 covers the whole build, every milestone in the
+PRD. Finishing one milestone is not a gate: the run goes on to the next, and Gate 2 comes
+once, when the last is done.
 
 ## Business pipelines
 

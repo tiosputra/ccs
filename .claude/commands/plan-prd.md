@@ -44,7 +44,8 @@ Eight phases and **exactly two stops**. Phases 1–3 gather requirements a quest
 time, and Phase 3.5 clears every question the user can answer before anything is written.
 Phase 5 is Gate 1 and Phase 7 is Gate 2 — those are the only places you hand control
 back. Between Gate 1 and Gate 2 the run is continuous: do not stop to ask permission for
-each step, because Gate 1 already approved the build.
+each step, because Gate 1 already approved the build - **every milestone in the PRD**, not
+just the first. Gate 2 comes once, after the last milestone is complete.
 
 ### Phase 0 — PROPOSE THE TASK
 
@@ -301,8 +302,9 @@ Validation status
 
 Open questions: {count} deferred ({count} resolved in the interview)
 
-Read it, then say the word and I'll start the task, implement milestone 1 test-first,
-and run code review. I'll stop again before opening any PR.
+Read it, then say the word and I'll start the task, implement all {count} milestones
+test-first, one after another, with code review after each. I'll stop again only when
+the whole PRD is built, before opening any PR.
 ```
 
 Anything other than approval — a correction, a new source branch, a different repo list or
@@ -311,6 +313,10 @@ isolation — means edit the PRD and stop again. Only an explicit yes moves to P
 ### Phase 6 — BUILD (only after Gate 1)
 
 Now run straight through. No further permission prompts; Gate 1 covered all of this.
+
+Steps 1-2 run once. Steps 3-6 run **once per milestone**, in table order, until every row
+is `complete` - then, and only then, Phase 7. Finishing a milestone is not a stopping
+point: do not report it as done, do not offer a PR, go straight to the next row.
 
 1. **Start the task** with the exact command the PRD named:
 
@@ -408,20 +414,30 @@ Now run straight through. No further permission prompts; Gate 1 covered all of t
    Fix anything the review rates CRITICAL or HIGH, then re-run the affected tests. Report
    MEDIUM findings without necessarily fixing them; that is the user's call at Gate 2.
 
-6. **Mark the milestone** `complete` in the PRD.
+6. **Mark the milestone** `complete` in the PRD, then loop back to step 3 for the next
+   `pending` row. When none is left, go to Phase 7.
 
-### Phase 7 — GATE 2: done, ask about the PR
+   The only reason to reach Phase 7 with a milestone still pending is a real block: a
+   deferred Open Question that now decides the design, a repo the task does not hold, or
+   a RED you cannot clear. Stop there, leave that row `in-progress` or `pending`, and say
+   at Gate 2 which milestones are complete, which are not, and exactly what blocks them.
+   A milestone being merely large is not a block.
+
+### Phase 7 — GATE 2: the whole PRD is built, ask about the PR
 
 Report and **stop**. Do not stage, commit, push, or open a PR until the user says so.
 
 ```
-Done: <task> — milestone {N}, {milestone name}
+Done: <task> — all {n} milestones
+
+  M1 {name}   complete   plan.md
+  M2 {name}   complete   plan-m2.md
 
   {repo}   {n} files changed   tests {pass/total}   review {clean | n findings}
   {repo}   {n} files changed   tests {pass/total}   review {clean | n findings}
 
 Evidence:  tasks/<date>_<task>/testing.md   ({n} repo sections)
-Plan:      tasks/<date>_<task>/plan.md      (plan-m{N}.md for a later milestone)
+Plans:     tasks/<date>_<task>/plan.md, plan-m2.md, ...   (one per milestone)
 Contract:  tasks/<date>_<task>/api-contract.md   ({n} changes, {n} breaking — or "none")
 Uncommitted in: {workdir per repo, from task.sh where <task>}   (nothing committed yet)
 
@@ -438,7 +454,9 @@ per repo against {source branch}. Or say what to change first.
 On approval, run `/pr` — it does the staging, committing, pushing, and PR creation, one PR
 per repo with changes. Pass it the base branch from the PRD if it differs from the default.
 
-If milestones remain, offer the next one after the PR is open.
+There is one Gate 2 and one set of PRs per run, covering every milestone. If the run
+stopped early on a block (step 6), the PRD's remaining rows are what a later `/plan` run
+picks up once the block is cleared.
 
 ## Integration
 
@@ -446,8 +464,8 @@ If milestones remain, offer the next one after the PR is open.
 /plan-prd <idea> from branch <ref>
       |         writes tasks/<date>_<task>/prd.md   <- nothing else created yet
    [GATE 1]     you read it and confirm
-      |         task.sh start -> /plan (+ api-contract.md) -> tdd-workflow -> reviewer agents
-   [GATE 2]     you confirm it is ready
+      |         task.sh start, then per milestone: /plan (+ api-contract.md) -> tdd-workflow -> reviewer agents
+   [GATE 2]     every milestone done - you confirm it is ready
       |
     /pr         stage, commit, push, open one PR per repo
 ```
@@ -473,6 +491,7 @@ If milestones remain, offer the next one after the PR is open.
 - **SOURCE_BRANCH_EXPLICIT**: the source branch came from the invocation or from asking, never from a default.
 - **NOTHING_STARTED_BEFORE_GATE_1**: no task, no branch, no code — only the PRD file.
 - **TWO_STOPS_EXACTLY**: the run pauses at Gate 1 and Gate 2, and nowhere else.
+- **ALL_MILESTONES_BEFORE_GATE_2**: Gate 2 is reached with every milestone `complete`, or with the unfinished ones named and the block that stopped each; never after milestone 1 with the rest silently pending.
 - **PROBLEM_CLEAR**: problem is specific and evidenced (or flagged as assumption).
 - **USER_CONCRETE**: primary user is a specific role, not "users".
 - **HYPOTHESIS_TESTABLE**: measurable outcome included.

@@ -1,6 +1,6 @@
 ---
 name: frontend-patterns
-description: Frontend development patterns for React, Next.js, state management, performance optimization, and UI best practices. Use when building or reviewing React or Next.js components, state, or render performance.
+description: Frontend development patterns for React, Next.js, state management, performance optimization, and UI best practices, starting with finding and reusing a component the repo already has. Use when building or reviewing React or Next.js components, state, or render performance, and before creating any new UI component such as a picker, modal, filter, select or table.
 metadata:
   origin: ECC
 ---
@@ -16,8 +16,48 @@ applying anything below, and follow it wherever the two disagree. It was written
 for that codebase; this file was not. Where it is silent, this skill applies.
 See `CLAUDE.md`.
 
+## Reuse before you build
+
+Before writing a new UI component, look for one the repo already has that does
+the job. A date range picker, a modal, a searchable select, a filter bar, an
+export button, a status pill: an admin panel usually has each of these already,
+styled and wired the way its team expects. A second one that looks and behaves
+slightly differently is a defect, even if it works. Users notice that the date
+filter on one page does not look like the one on the next.
+
+How to look, so the search does not miss what is there:
+
+- **Find the nearest sibling screen and read its whole component tree**, not just
+  its top file. The page that already has the feature you are adding is the best
+  reference. Its pickers and filters often sit in child files (`*Filters.tsx`,
+  `*Toolbar.tsx`, `sections/`), so open every import the page renders. Reading only
+  the entry component is how a reusable picker gets missed.
+- **Search by what the component does, not by the name you would give it.** A
+  date range picker may be called `DateRangeSelector`, live under an unrelated
+  feature folder such as a dashboard's analytics, and wrap a library. Grep for the
+  behaviour (`DateRange`, `DatePicker`, `type="date"`, `Combobox`, `Dialog`,
+  `Blob`, `export`) across `components/`, and check which files import it.
+- **A UI library in `package.json` is a lead, not an answer.** If
+  `react-date-range`, `react-datepicker` or a headless UI kit is installed, find
+  the component that already wraps it before reaching for the library directly.
+- **Shared folders first** (`components/Base`, `components/common`, `ui/`,
+  `StateView`), then feature folders.
+
+Then decide:
+
+| Found | Do |
+|---|---|
+| A component that fits the objective | Use it, with its existing props. Match how the sibling screen calls it |
+| One that almost fits | Extend it with an optional prop that leaves current callers unchanged, rather than forking a copy |
+| One that does not fit (wrong data model, inaccessible, cannot be extended without breaking callers) | Build new, and say why the existing one was rejected, in the plan or the PR |
+| Nothing | Build new, shaped like the repo's existing components so the next person can reuse it |
+
+Name what you reused, and what you rejected and why, in the plan. A reviewer
+should be able to see that the search happened.
+
 ## When to Activate
 
+- About to create a new UI component: search for an existing one first (above)
 - Building React components (composition, props, rendering)
 - Managing state (useState, useReducer, Zustand, Context)
 - Implementing data fetching (SWR, React Query, server components)

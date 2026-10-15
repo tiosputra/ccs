@@ -114,8 +114,10 @@ The main command. It runs a whole task, stopping twice:
    them.
 2. Writes `tasks/<date>_<task>/prd.md`. **Gate 1:** you read and confirm. Nothing has
    started yet.
-3. Starts the task, writes the plan, implements test-first, and runs the reviewers.
-4. **Gate 2:** reports what changed, uncommitted. You confirm, then run `/pr`.
+3. Starts the task, then for every milestone in the PRD: writes its plan, implements it
+   test-first, and runs the reviewers. It does not stop between milestones.
+4. **Gate 2:** once the whole PRD is built, reports what changed, uncommitted. You
+   confirm, then run `/pr`.
 
 The source branch is required and never guessed. `--space` gives the task its own
 worktrees instead of working in `repos/`.
