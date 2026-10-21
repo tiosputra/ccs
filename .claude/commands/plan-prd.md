@@ -369,6 +369,14 @@ point: do not report it as done, do not offer a PR, go straight to the next row.
    instead of scattering a copy into each service repo. Every repo appends its own
    `## <repo>` section to that same file.
 
+   **Refresh learned facts first, yourself.** Before the first repo is implemented, run
+   `.claude/scripts/learn.sh status tdd-workflow`. For every repo of the task that is
+   `stale`, `missing` or `unstamped`, run `/learn tdd-workflow <repo>` now, in this
+   session - scan, write, stamp - and carry on. It needs no permission: Gate 1 covered
+   the build, and the only part of `/learn` that is the user's is setting `reviewed: yes`.
+   Never stop the run to ask for it. Say at Gate 2 which files were refreshed and that
+   they are unreviewed.
+
    Tell it, in one line per repo, what that repo's `AGENTS.md` requires of the
    implementation — the tools to reach for first, the style it fixes, the steps it
    forbids. The skill is handed directories, so it will not go looking, and a rule
@@ -379,8 +387,10 @@ point: do not report it as done, do not offer a PR, go straight to the next row.
    same things plus the workspace root (`task.sh root`) and that repo's base commit,
    but pass the evidence as `return`, not the path: parallel agents must not edit one
    file. Each replies with its `## <repo>` section; append them to `testing.md`
-   yourself, one per repo. An agent that stops - usually a repo whose
-   `tdd-workflow` facts are not learned - is reported to the user, not retried.
+   yourself, one per repo. An agent that stops because a repo's `tdd-workflow` facts
+   are stale or missing is not a block: run `/learn tdd-workflow <repo>` yourself, as
+   above, and dispatch it again with the same inputs. An agent that stops for any other
+   reason is reported to the user, not retried.
    One repo, or a change where one repo's tests depend on another's code, stays
    inline.
 

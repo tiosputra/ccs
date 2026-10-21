@@ -44,7 +44,9 @@ confirmed this one. Point those out, since reading one takes a minute and a
 wrong fact in it misleads every session after.
 
 Relay the table grouped by what needs doing. Do not start learning anything
-unasked.
+unasked - except when a running flow needs the file: a skill or `/plan-prd` that
+finds its repo `stale`, `missing` or `unstamped` runs mode learn itself and carries
+on. Scanning, writing and stamping never need the user; only `reviewed: yes` does.
 
 ## mode: learn
 

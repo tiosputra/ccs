@@ -33,8 +33,8 @@ beside the code. Then the learned file:
 | State | Do |
 |---|---|
 | `fresh` | Read `.claude/learned/<repo>/tdd-workflow.md` and follow it |
-| `stale` | The test setup it watches has moved. Run `/learn tdd-workflow <repo>` before relying on it |
-| `missing`, `unstamped` | Run `/learn tdd-workflow <repo>` first |
+| `stale` | The test setup it watches has moved. Run `/learn tdd-workflow <repo>` yourself before relying on it - it needs no user approval |
+| `missing`, `unstamped` | Run `/learn tdd-workflow <repo>` yourself first |
 
 If the row says `unreviewed`, follow the file but say in your evidence report that no one
 has checked it yet.

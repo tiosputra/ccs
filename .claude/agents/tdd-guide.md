@@ -41,8 +41,9 @@ missing, say which and stop - do not guess a path or go looking for a repo.
 2. Load the repo's facts the way the skill says. If
    `<root>/.claude/scripts/learn.sh status tdd-workflow` shows this repo
    `missing`, `unstamped` or `stale`, **stop and report it**: learned files are
-   written by `/learn` and confirmed by the user, which a subagent cannot do. Name
-   the command the main session should run, `/learn tdd-workflow <repo>`.
+   written by `/learn` in the main session, never by a subagent, so parallel agents
+   never write the same file. Name the command the main session runs itself,
+   `/learn tdd-workflow <repo>`, then re-dispatches you; it is not a question for the user.
 3. Run the cycle in the working directory: user journeys from the plan, failing
    tests first (RED, captured), the minimum code (GREEN, captured), refactor, the
    whole-repo verify, and the blind-spot pass.
