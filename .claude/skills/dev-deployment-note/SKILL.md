@@ -66,6 +66,51 @@ What never moves the verdict:
 Then a one-screen summary: repos, risk per repo (low, medium, high), and the
 blast radius - who notices if this goes wrong, and how fast.
 
+## The release header
+
+The section opens the way the team's release document does - a table a release
+owner can fill and paste:
+
+- **Release date** - left for the release owner; never invented.
+- **Branch** - in place of a category: each service's feature branch and the
+  target it ships into. A release is its branches, so the branch says more than
+  a label like "New Feature" would.
+- **Participants** - the people who wrote the code, from the commit authors
+  between the merge base and the feature SHA, per service, most commits first.
+  Names only, never an email; one person under two emails is one participant.
+- **PRD** - a link where a task's PRD describes the branch, otherwise blank.
+- **Google Meet** - blank, for the owner.
+- **Pull requests** - each PR with its state, and the release date column
+  left for the owner.
+
+## Summary of request change
+
+Everything a reader needs if they read nothing else: the features in the
+release as a plain list, one line each, then the verdict and risk per repo,
+then a **must prepare** callout - how many new env keys and in which services,
+how many migrations, what data must exist in the database, what third-party
+setup and manual scripts there are, and whether anything breaks an installed
+app - each pointing at the subsection that holds the detail.
+
+## Make what must be prepared impossible to miss
+
+New config and required data are the steps most often missed at a release, so
+they get their own subsections, marked with ⚠️ in the heading, not rows buried
+in a reference table:
+
+- **New environment variables**, per service: a block ready to paste into the
+  deployment config, one `KEY=` line each with a placeholder that says where the
+  value comes from - never the value - and beside it what happens when it is
+  missing (refuses to boot, or silently defaults), whether it is new or must be
+  checked because it may already exist, and anything to double-check, such as a
+  port or a host that differs per environment.
+- **Migration / seeder / DML**, per service: how this repo runs them, every
+  file, what each does, whether it locks a table or breaks the old code.
+- **Required database data**: rows that must exist before the code that reads
+  them runs - master data, config rows, a feature flag kept in a table. Each
+  says the table, why it is needed, what breaks without it, and a read-only
+  query that shows whether it is there. Never customer data.
+
 ## Impact, per repo
 
 Say what changes **in production behaviour**, not in code: which requests,
@@ -130,7 +175,9 @@ schema before the code that uses it, a backend before the app that calls it, a
 provider's setup before the code that expects it. Where order does not matter,
 say so.
 
-Reference tables may sit beside the runbook so a step can point at them:
+Reference subsections sit beside the runbook so a step can point at them. Config,
+migrations and required data are judged as below and written into their ⚠️
+subsections; the rest go together under the notes:
 
 - **Config and secrets** (`env` records) - **read the file path, not just the
   key.** A key read where the repo reads service configuration (the learned file
@@ -198,6 +245,10 @@ those logs and metrics live when the learned file records it.
 - Developers read this with the code open, so branch names, commit SHAs, PR
   numbers, repo names, file paths and keys are welcome here - the opposite of the QA section.
 - Put a fact once and point at it; a deploy step stated twice drifts.
+- Number every subsection and every deploy step under the section's own number
+  - `1.4`, then `1.4.1`, `1.4.2` - so a step can be named in a chat or a call
+  and pointed at from another subsection. Start each numbered subsection's
+  heading with its number: that is what puts it in the page's contents rail.
 - Mark anything the records did not settle and the diff did not answer as an
   **open question for the release owner**, never as a guess.
   An open question asks about the code or the system - how a repo ships, what a

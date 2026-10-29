@@ -35,16 +35,21 @@ What a repo's paths mean and how it ships are learned once per repo:
 and rollback; `/learn qa-release-note <repo>` for who each path faces and where
 its app routes links.
 
-Each file has two sections for two readers:
+Each file has three sections for three readers:
 
-- **Dev** - for whoever ships it: the verdict, impact, backward compatibility,
+- **1. Dev Team** - for whoever ships it, in the team's release format with every
+  point numbered (`1.4.3`) and listed in the page's contents: release information with the branch and the
+  participants taken from the commit authors, the verdict, impact, backward compatibility,
   the deploy steps in order (config, third parties, data, migrations, merges),
   rollback and what survives it, and what to check afterwards. The `dev-deployment-note`
   skill says how.
-- **QA** - the release note: plain-language statements of what should be true
+- **2. QA Team** - the release note: plain-language statements of what should be true
   after the release, grouped by feature, with no reference pointing outside
   itself, so it can be pasted to the QA team whole. The `qa-release-note` skill
   says how.
+- **3. Ops Team** - what changes for the ops team: admin panel screens, Google
+  Sheets, WhatsApp, email and other alerts, scheduled jobs, and what they must
+  do. Self-contained like the QA note. The `ops-release-note` skill says how.
 
 Notes written before 2026-10-06 sit loose in `release/` as `<date>-<name>.md`;
 the oldest were written by `/release-notes`, the command's old name, with the QA

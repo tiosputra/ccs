@@ -156,7 +156,7 @@ log.
 
 | Command | Does |
 |---|---|
-| `/deployment-notes <name>` + one line per service | Compares each service's feature branch to its target, then writes developer notes (what to prepare, deploy order, rollback, what to watch) and a QA release note |
+| `/deployment-notes <name>` + one line per service | Compares each service's feature branch to its target, then writes developer notes (what to prepare, deploy order, rollback, what to watch), an operations note (admin panel, sheets, WhatsApp, email, alerts) and a QA release note |
 | `/graph [build \| review \| run …]` | Builds code graphs of the repos, and shows what a task's change touches |
 | `/learn <skill> <repo>` | Records once how a repo does something a skill covers (its logger, its test command), so later sessions read the note instead of re-scanning |
 | `/ccs` | Health check of the workspace system itself; proposes one fix |

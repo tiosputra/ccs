@@ -1,5 +1,5 @@
 ---
-description: Turn a stated set of branches into deployment notes - each service's feature branch compared against its target from local snapshots - a dev section on what to prepare, the order and how to roll back, then a QA release note
+description: Turn a stated set of branches into deployment notes - each service's feature branch compared against its target from local snapshots - a dev section on what to prepare, the order and how to roll back, a QA release note, then an operations section on what changes for the ops team
 argument-hint: "<name>, then one line per service: <service> -> <feature> -> <target>"
 allowed-tools: Bash(.claude/scripts/deployment-notes.sh:*), Bash(.claude/scripts/learn.sh:*), Bash(git diff:*), Read, Write, Glob, Grep, Artifact
 ---
@@ -67,15 +67,16 @@ repo: read it at its default branch for what an installed app does with a
 response, and say how old that checkout is.
 
 The output is one file, `release/<date>-<name>/<date>-<name>.md`, inside the
-snapshot directory: deployment notes for two readers, in this order. It is also
+snapshot directory: deployment notes for three readers, in this order. It is also
 published as a page (step 6), so it can be read and shared without the repo.
 
 | Section | Reader | Asks | Written per |
 |---|---|---|---|
-| **Dev** | whoever ships it | What must be ready, in what order, how do I undo it? | `dev-deployment-note` skill |
-| **QA** | the QA team | What should be true afterwards? | `qa-release-note` skill |
+| **1. Dev Team** | whoever ships it | What must be ready, in what order, how do I undo it? | `dev-deployment-note` skill |
+| **2. QA Team** | the QA team | What should be true afterwards? | `qa-release-note` skill |
+| **3. Ops Team** | the operations team | What changes in the admin panel, the sheets, the messages and alerts - and what must I do? | `ops-release-note` skill |
 
-Read both skills before writing. If `release/` already holds notes, the newest
+Read all three skills before writing. If `release/` already holds notes, the newest
 file is the house example — read it too. Notes written before this command was
 split have the QA note near the top and the deploy material spread after it;
 follow the section list below, not their order.
@@ -183,7 +184,8 @@ it prints, all tab-separated, with the service alias as the second field:
 
 | Record | Meaning | Section |
 |---|---|---|
-| `svc` | the roll call again, as `prepare` recorded it | both |
+| `svc` | the roll call again, as `prepare` recorded it | all |
+| `people` | who wrote the commits between the merge base and the feature SHA - name, emails, commit count | dev |
 | `moved` | origin's branch is no longer the SHA in the snapshot | — |
 | `diff-lines` | how large each service's diff is | — |
 | `env` | an env key an added line reads, **and the file it was read in** | dev |
@@ -194,7 +196,8 @@ it prints, all tab-separated, with the service alias as the second field:
 | `deploy` | each workflow a push to the target sets off, each deploy workflow that runs only by hand, or `none` | dev |
 | `proto` | a changed contract file, and which other checkouts carry a copy | dev |
 | `deeplink` | a link an added line emits, checked against the app's learned route registry | QA |
-| `surface` | who a changed file faces, from the repo's learned surfaces | QA |
+| `surface` | who a changed file faces, from the repo's learned surfaces | QA, ops |
+| `ops` | a changed file that touches a sheet, WhatsApp, email, push, chat or a scheduled job, with the first matching line | ops |
 | `learn` | a repo whose surfaces were not learned, so none are reported for it | QA |
 | `test` | an added or removed test assertion — the extraction engine | QA |
 | `gap` | a changed source file with no test touched in the same directory | QA |
@@ -224,7 +227,10 @@ line by whether the old code survives it, a `dep` pair by whether the bump
 matters. The records marked **QA** are the `qa-release-note` skill's: `gap`
 filtered to what someone could notice, `deeplink` by host, and `test` records
 turned into the note by filtering, pairing, translating and adding unchanged
-guards. Follow each repo's learned files for both.
+guards. The records marked **ops** are the `ops-release-note` skill's: an `ops`
+record is a lead, not a fact - read the code and keep only what someone in
+operations would notice - and a `surface` facing staff or admin is a screen
+they work in. Follow each repo's learned files for all three.
 
 ### 5. Write `release/<date>-<name>/<date>-<name>.md`
 
@@ -232,28 +238,58 @@ A header with the name, the snapshot time, and a table of the services in scope 
 feature and target with their SHAs, ahead/behind, size, and the open PR if one
 exists — then:
 
-1. **At a glance** — the verdict (GO, GO WITH CONDITIONS, NO-GO) and why in a
-   line, judged on the code alone; themes; blast radius; the other open PRs
-   into each target, for awareness
-2. **Dev — deploying it**, per the `dev-deployment-note` skill:
-   1. Impact, per repo
-   2. **Backward compatibility** — store builds, the TestFlight build, the
+Three team sections, in this order, then two for the release owner. Every
+subsection is numbered under its section (`1.2`, `2.3`, `3.1`) and those
+numbered headings are what the page's contents rail lists, so a reader can jump
+to "1.4" from the left and a point can be named in a call:
+
+1. **Dev Team — deploying it**, per the `dev-deployment-note` skill, in the
+   team's release format. Every deploy step is numbered `1.4.N`:
+   1. **Release information** - the table: Release date (blank for the owner),
+      **Branch** per service `feature -> target` (in place of a category),
+      **Participants** from the `people` records - names per service, most
+      commits first, never an email - PRD, Google Meet (blank), then the pull
+      requests: PR, state, release date (blank); then the other open PRs into
+      each target, for awareness
+   2. **Summary of request change** - the verdict first (GO, GO WITH
+      CONDITIONS, NO-GO, under a `#### Verdict` heading) and why, judged on
+      the code alone; the features as a plain list; risk per repo and blast
+      radius; and a **⚠️ must prepare** callout: counts of new env keys per
+      service, migrations, required database data, third-party setup, manual
+      scripts, and any break for installed apps, each pointing at its
+      subsection. Then impact per repo
+   3. **Backward compatibility** - store builds, the TestFlight build, the
       web and other services, as a table per change; or `No breaking changes
       found`, with what was checked
-   3. **Deploy steps** — one numbered runbook in the order the work happens:
-      config, third-party setup, data to seed, scripts, sheet edits, branches to
-      bring up to date, migrations, merges and deploys. Each step says why it
-      sits there and what breaks if it is skipped
-   4. Reference for the steps — config and secrets, third parties,
-      migrations, manual scripts, dependencies, a "what merging into the
-      target sets off" table from the `deploy` records, how it reaches traffic
-   5. Rollback, **including durable residue** and the point of no return
-   6. Verify after deploy
-   7. Risks and watch items — about the code's behaviour, carried forward from
-      the previous notes
-   8. Sign-offs
-3. **QA — release note**, per the `qa-release-note` skill. Self-contained, so
-   it can be pasted whole
+   4. **Release steps** - one numbered runbook, `1.4.1` onward, in the order
+      the work happens, each step tagged with its service: config, third-party
+      setup, data to seed, scripts, sheet edits, branches to bring up to date,
+      migrations, merges and deploys. Each says why it sits there and what
+      breaks if it is skipped
+   5. **⚠️ New environment variables** - per service, a paste-ready block of
+      `KEY=<where the value comes from>` lines, then what each does when missing
+   6. **⚠️ Migration / seeder / DML** - per service
+   7. **⚠️ Required database data** - rows that must exist, each with a
+      read-only query that shows it is there
+   8. **Notes** - third parties, dependencies, infrastructure and anything to
+      install on the host, a "what merging into the target sets off" table from
+      the `deploy` records, how it reaches traffic
+   9. **Rollback**, **including durable residue** and the point of no return
+   10. **Verify after deploy**
+   11. **Risks and watch items** - about the code's behaviour, carried forward
+       from the previous notes
+   12. **Sign-offs**
+   13. **Revision history** - Date, Version, Description, Author; the first row
+       is this generation
+2. **QA Team — release note**, per the `qa-release-note` skill: a short
+   reading guide, then one numbered subsection per feature group (`2.1`,
+   `2.2`, ...) holding that group's plain-text block, and last the "not in this
+   release" and "not reachable by QA" lists. Self-contained, so the section can
+   be pasted whole and each group on its own
+3. **Ops Team — what changes for operations**, per the `ops-release-note`
+   skill, numbered `3.N`: admin panel, Google Sheets, WhatsApp, email, push and
+   other alerts, scheduled jobs, and what operations must do. Self-contained,
+   so it can be pasted whole
 4. **Open questions for the release owner**
 5. **How this was produced** — the `origin/<branch>@<sha>` pairs compared, the
    snapshot time, what was not learned, and the diff against the previous notes
