@@ -53,7 +53,7 @@ experiment, with no stashing and no `git checkout` whiplash between them.
 │
 ├── .claude/
 │   ├── commands/           /plan-prd, /plan, /task, /pr, /ccs, /learn, /graph, /deployment-notes,
-│   │                       /idea, /brand, /market, /decide
+│   │                       /idea, /brand, /market, /decide, /rust-review, /rust-build
 │   ├── skills/             tdd-workflow, logging, ccs-conventions, the pattern skills,
 │   │                       the product, brand and market skills
 │   ├── learned/            per-repo facts a skill learned - gitignored, see /learn

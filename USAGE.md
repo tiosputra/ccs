@@ -159,6 +159,8 @@ log.
 | `/deployment-notes <name>` + one line per service | Compares each service's feature branch to its target, then writes developer notes (what to prepare, deploy order, rollback, what to watch), an operations note (admin panel, sheets, WhatsApp, email, alerts) and a QA release note |
 | `/graph [build \| review \| run …]` | Builds code graphs of the repos, and shows what a task's change touches |
 | `/learn <skill> <repo>` | Records once how a repo does something a skill covers (its logger, its test command), so later sessions read the note instead of re-scanning |
+| `/rust-review <task> <repo>` | Reviews one Rust repo of a task by hand (`/plan-prd` already does this in its review step) |
+| `/rust-build <task> <repo>` | Fixes a Rust build that broke after a pull or branch switch, leaving the fix uncommitted |
 | `/ccs` | Health check of the workspace system itself; proposes one fix |
 | `/ccs note <text>` | Records one line of friction mid-task, to fix later |
 
@@ -170,7 +172,7 @@ call the right ones. Worth knowing they exist:
 | Area | Skills |
 |---|---|
 | Product and business | `product-lens`, `product-capability`, `investor-materials`, `frontend-slides`, `market-research`, `competitive-platform-analysis`, `benchmark-methodology`, `competitive-report-structure`, `brand-discovery`, `brand-voice` |
-| Building | `tdd-workflow`, `contract-first`, `logging`, `api-design`, and patterns for Go, Flutter/Dart, React, Postgres |
+| Building | `tdd-workflow`, `contract-first`, `logging`, `api-design`, and patterns for Go, Rust, Flutter/Dart, React, Postgres |
 | UI | `design-system`, `liquid-glass-design` |
 | Checking | `e2e-testing`, `verification-loop`, `browser-qa`, `canary-watch` (after a deploy) |
 | Deciding | `council`, `dev-team`, `architecture-decision-records` |

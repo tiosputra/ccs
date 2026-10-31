@@ -179,7 +179,8 @@ What holds in any repo, and what `/learn` measured against:
   `package.json` only for tooling - templates, scripts - and still be a Go service.
 - **The language's testing skill holds its idioms; this skill holds the cycle.** Once the
   language is known, load its skill before Step 2: `golang-testing` for Go (table-driven
-  tests, subtests, `-race`), `react-testing` for React components and hooks (Testing
+  tests, subtests, `-race`), `rust-testing` for Rust (a `Cargo.toml` at the root: `#[cfg(test)]`
+  modules, rstest, mockall), `react-testing` for React components and hooks (Testing
   Library, MSW), `dart-flutter-patterns` for Flutter (its *Testing Quick Reference*). Where one of
   them disagrees with the repo's `AGENTS.md` or learned file, those win.
 - **Prefer the repo's own test target** (a makefile `test` target, a package script) over

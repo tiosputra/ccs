@@ -58,16 +58,21 @@ is a new line in the script, not a new paragraph in the command.
 **Almost never build an agent.** Agents start with no context and cannot write
 back to the session that spawned them. Workspace bookkeeping needs exactly the
 context the main session has — the task name, the PRD, the URL that just came
-back from `gh`. The reviewers (`go-reviewer`, `typescript-reviewer`,
+back from `gh`. The reviewers (`go-reviewer`, `rust-reviewer`, `typescript-reviewer`,
 `react-reviewer`, `flutter-reviewer`, `database-reviewer`, `security-reviewer`) earn their place
 because review genuinely benefits from a fresh reading of a diff.
 `tdd-guide` earns its place differently: it runs one repo's `tdd-workflow` cycle
 so a multi-repo milestone can run its repos in parallel. It carries no method of
 its own — it reads the skill — and it returns its evidence rather than writing a
-shared file. The build resolvers (`go-build-resolver`, `dart-build-resolver`)
+shared file. The build resolvers (`go-build-resolver`, `dart-build-resolver`,
+`rust-build-resolver`)
 are outside the flow on purpose: a build broken mid-cycle is the implementing
 session's to fix, so they are run by hand, for a build broken by a pull or a
-branch switch. `code-reviewer` is the review step's fallback, for a diff no
+branch switch. `/rust-build` and `/rust-review` are the only per-language commands,
+and they are thin: each reads a task's working directory and base commit off
+`task.sh report` and hands them to the agent. ECC's per-language test commands
+(`/go-test`, `/rust-test`) are not kept - test-first is `tdd-workflow`, and a second
+entry point would bring back its own coverage target. `code-reviewer` is the review step's fallback, for a diff no
 language reviewer covers. `planner` and `architect` are read-only and run by hand:
 a fresh, independent reading is the point, so they return a draft or a set of
 options and the session writes the plan or the ADR. Nothing about managing the
@@ -250,6 +255,13 @@ way a task's standard artifacts are (`business/README.md` lists them), and
 `/plan-prd` reads an idea's brief and `business/decide.md`. A business command
 that started a task, or a task that wrote into `business/`, would merge the two
 concepts this split keeps apart.
+
+**ECC's `.claude/rules/` is not used here.** Claude Code loads every file there into
+every session, so it is a second, always-on layer of conventions beside the skills -
+one that cannot rank below a repo's `AGENTS.md`, and whose ECC copy contradicts
+`CLAUDE.md` (an 80% coverage floor, agents spawned without asking, its own commit
+format). When an import brings one, fold what is new into the matching skill and
+delete the folder, as was done for Rust on 2026-10-31.
 
 **Imported skills are adapted where they meet the workspace, and nowhere else.**
 An ECC skill keeps its method. What changes is the seam: a *Where it sits in the

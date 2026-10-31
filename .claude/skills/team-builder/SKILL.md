@@ -122,8 +122,8 @@ User: team builder
 
 Claude:
 Available agent domains:
-1. Review (6) — code-reviewer, database-reviewer, flutter-reviewer, go-reviewer, ...
-2. Build (3) — dart-build-resolver, go-build-resolver, tdd-guide
+1. Review (8) — code-reviewer, database-reviewer, flutter-reviewer, go-reviewer, ...
+2. Build (4) — dart-build-resolver, go-build-resolver, rust-build-resolver, tdd-guide
 3. Design (2) — architect, planner
 
 Pick domains or name specific agents:

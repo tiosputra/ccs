@@ -407,6 +407,7 @@ point: do not report it as done, do not offer a PR, go straight to the next row.
    finding the team will reject. Tell reviewers they can ask the graph
    who calls a function with `.claude/scripts/graph.sh run <task>/<repo> query callers_of <name>`:
    - Go (a `go.mod` at the repo root) -> `go-reviewer`
+   - Rust (a `Cargo.toml` at the repo root) -> `rust-reviewer`
    - TypeScript or JavaScript -> `typescript-reviewer`, plus `react-reviewer` when the diff
      touches `.tsx` or `.jsx`
    - Flutter or Dart (a `pubspec.yaml` at the repo root) -> `flutter-reviewer`
@@ -482,7 +483,7 @@ picks up once the block is cleared.
 
 - `/task` — start, locate or finish a task by hand, outside this flow.
 - `/plan` — plan a later milestone of an existing PRD on its own.
-- `tdd-workflow` and the reviewer agents (`go-reviewer`, `typescript-reviewer`,
+- `tdd-workflow` and the reviewer agents (`go-reviewer`, `rust-reviewer`, `typescript-reviewer`,
   `react-reviewer`, `flutter-reviewer`, `database-reviewer`, `code-reviewer`,
   `security-reviewer`) — layout-blind; they are
   handed a working directory and a base ref, never a task name.
